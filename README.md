@@ -19,6 +19,14 @@
 ![Menü](screenshots/menu.png?raw=true "Menü")
 
 ## Build
+Every push is linted, tested, built and packaged by GitHub Actions, the `.ipk` can be downloaded from the workflow run.
+
+```s
+npm run lint
+npm run typecheck
+npm test
+```
+
 Normal build without webos running
 * TVGuides.js:getNow() needs to return 1607462851000 as mock timestamp for now
 * TVHDataService:constructor() needs to use MockServiceAdapter instead of LunaServiceAdapter
@@ -43,12 +51,35 @@ ares-inspect -d emulator com.willinux.tvh.app --open
 ares-inspect -d tv com.willinux.tvh.app --open
 ```
 ## Features
-- EPG
-- Channel List
+- EPG (next 36 hours, refreshed automatically every 6 hours) with program images
+- Channel List with the channel numbers of tvheadend
+- Channel groups (tvheadend channel tags) and favorites
+- Search for programs in the EPG
+- Back to the previous channel
+- Automatic reconnect if a stream fails or stalls
+- Video quality (UHD/HD/SD and resolution) in the channel info
+- Audio track and subtitle selection
 - Record live tv or plan recordings using EPG
 - Play and Manage recordings
 - User Authentication: basic and digest (md5, sha256)
 - Picture in picture (experimental, see below)
+- English and Spanish user interface (taken from the TV language)
+
+## Remote control
+Live tv:
+* **P+ / P-**: next/previous channel of the selected channel group
+* **0-9**: channel number (up to 4 digits)
+* **Back**: hide the overlays, if nothing is shown go back to the previous channel
+* **Up / Down**: channel list
+* **OK**: channel info
+* **Red**: record, **Green**: menu (TV, search, recordings, setup), **Yellow**: audio/subtitles, **Blue**: EPG
+* **Right / Left**: picture in picture (see below)
+
+Channel list:
+* **Yellow**: next channel group, **Blue**: add/remove favorite, **Right/Left**: program details
+
+EPG:
+* **Yellow**: next channel group
 
 ## Picture in picture
 While watching live tv:

@@ -15,10 +15,16 @@ import { Panel } from '@enact/moonstone/Panels';
 import { AppViewState } from '../App';
 import MediaUtils from '../utils/MediaUtils';
 import PipWindow from './PipWindow';
+import { t } from '../i18n/I18n';
 
 // if channels are switched faster than this, only the last selected channel gets started
 const ZAP_DEBOUNCE_MILLIS = 400;
-const PIP_MESSAGE_DURATION_MILLIS = 6000;
+const MESSAGE_DURATION_MILLIS = 6000;
+// channel numbers can have up to 4 digits (e.g. iptv channels)
+const MAX_CHANNEL_NUMBER_DIGITS = 4;
+// reconnect if the stream stalls for this time, with an increasing delay between the attempts
+const STALL_TIMEOUT_MILLIS = 15000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 export enum State {
     TV = 'tv',
@@ -45,7 +51,13 @@ const TV = () => {
     const timeoutStartStream = useRef<NodeJS.Timeout | null>(null);
     const lastSourceChange = useRef(0);
     const restartAfterPipFailure = useRef(false);
-    const timeoutPipMessage = useRef<NodeJS.Timeout | null>(null);
+    const timeoutMessage = useRef<NodeJS.Timeout | null>(null);
+    const timeoutReconnect = useRef<NodeJS.Timeout | null>(null);
+    const timeoutStall = useRef<NodeJS.Timeout | null>(null);
+    const reconnectAttempts = useRef(0);
+    // the channel shown before the current one, for the back button
+    const previousChannelPosition = useRef<number | null>(null);
+    const shownChannelPosition = useRef<number | null>(null);
     const [pipSettings] = useState(StorageHelper.getPipSettings());
     const audioTracksRef = useRef<AudioTrackList>();
     const textTracksRef = useRef<TextTrackList>();
@@ -54,7 +66,8 @@ const TV = () => {
     const [state, setState] = useState<State>(State.CHANNEL_INFO);
     const [channelNumberText, setChannelNumberText] = useState('');
     const [pipChannelPosition, setPipChannelPosition] = useState<number | null>(null);
-    const [pipMessage, setPipMessage] = useState('');
+    const [message, setMessage] = useState('');
+    const [videoQuality, setVideoQuality] = useState('');
 
     const focus = () => tvWrapper.current?.focus();
 
@@ -81,11 +94,7 @@ const TV = () => {
                 break;
             case 34: // programm down
                 event.stopPropagation();
-                // channel down
-                if (currentChannelPosition === 0) {
-                    return;
-                }
-                changeChannelPosition(currentChannelPosition - 1);
+                zapInGroup(-1);
                 break;
             case 40: // arrow down
                 event.stopPropagation();
@@ -93,11 +102,7 @@ const TV = () => {
                 break;
             case 33: // programm up
                 event.stopPropagation();
-                // channel up
-                if (currentChannelPosition === epgData.getChannelCount() - 1) {
-                    return;
-                }
-                changeChannelPosition(currentChannelPosition + 1);
+                zapInGroup(1);
                 break;
             case 67: // 'c'
             case 38: // arrow up
@@ -130,7 +135,12 @@ const TV = () => {
             }
             case 461: // backbutton
                 event.stopPropagation();
-                setState(State.TV);
+                if (state === State.TV && previousChannelPosition.current !== null) {
+                    // nothing shown on top of the video -> back to the previous channel
+                    changeChannelPosition(previousChannelPosition.current);
+                } else {
+                    setState(State.TV);
+                }
                 break;
             case 39: // right arrow -> open/close picture in picture
             case 80: // keyboard 'p'
@@ -172,10 +182,39 @@ const TV = () => {
 
     const getMediaElement = () => video.current;
 
-    const showPipMessage = (message: string) => {
-        setPipMessage(message);
-        timeoutPipMessage.current && clearTimeout(timeoutPipMessage.current);
-        timeoutPipMessage.current = setTimeout(() => setPipMessage(''), PIP_MESSAGE_DURATION_MILLIS);
+    const showMessage = (text: string) => {
+        setMessage(text);
+        timeoutMessage.current && clearTimeout(timeoutMessage.current);
+        timeoutMessage.current = setTimeout(() => setMessage(''), MESSAGE_DURATION_MILLIS);
+    };
+
+    /**
+     * switch to the next/previous channel of the current channel group (wraps around)
+     */
+    const zapInGroup = (direction: 1 | -1) => {
+        const view = epgData.getView();
+        const count = view.getChannelCount();
+        if (count === 0) return;
+        const row = view.getRow(currentChannelPosition);
+        let nextRow: number;
+        if (row >= 0) {
+            nextRow = (row + direction + count) % count;
+        } else {
+            // the current channel is not part of the group (e.g. selected by number): take the nearest one
+            nextRow = 0;
+            for (let i = 0; i < count; i++) {
+                const position = view.getPosition(i) as number;
+                if (direction > 0 && position > currentChannelPosition) {
+                    nextRow = i;
+                    break;
+                }
+                if (direction < 0 && position < currentChannelPosition) {
+                    nextRow = i;
+                }
+            }
+        }
+        const nextPosition = view.getPosition(nextRow);
+        nextPosition !== undefined && changeChannelPosition(nextPosition);
     };
 
     /**
@@ -203,7 +242,7 @@ const TV = () => {
         console.log('picture in picture failed:', reason);
         restartAfterPipFailure.current = true;
         setPipChannelPosition(null);
-        showPipMessage('Picture in picture could not be started. Your TV might not support two videos at once.');
+        showMessage(t('Picture in picture could not be started. Your TV might not support two videos at once.'));
     };
 
     /**
@@ -253,23 +292,29 @@ const TV = () => {
      * Enters a digit that is used as part of the new channel number
      */
     const enterChannelNumberPart = (digit: number) => {
-        if (channelNumberText.length < 3) {
-            const newChannelNumberText = channelNumberText + digit;
-            setChannelNumberText(newChannelNumberText);
+        // the header might still show the number of the current channel, a new input starts from scratch
+        const currentText = timeoutChangeChannel.current ? channelNumberText : '';
+        if (currentText.length >= MAX_CHANNEL_NUMBER_DIGITS) {
+            return;
+        }
+        const newChannelNumberText = currentText + digit;
+        setChannelNumberText(newChannelNumberText);
 
-            // automatically switch to new channel after 3 seconds
-            timeoutChangeChannel.current && clearTimeout(timeoutChangeChannel.current);
-            timeoutChangeChannel.current = setTimeout(() => {
-                const channelNumber = parseInt(newChannelNumberText);
-
-                epgData.getChannels().forEach((channel, channelPosition) => {
-                    if (channel.getChannelID() === channelNumber) {
-                        changeChannelPosition(channelPosition);
-                    }
-                });
-            }, 3000);
+        // automatically switch to new channel after 2 seconds, or right away if no more digits are possible
+        const switchChannel = () => {
+            timeoutChangeChannel.current = null;
+            const channelPosition = epgData.getChannelPositionByNumber(parseInt(newChannelNumberText));
+            if (channelPosition >= 0) {
+                changeChannelPosition(channelPosition);
+            } else {
+                showMessage(t('Channel {0} not found', newChannelNumberText));
+            }
+        };
+        timeoutChangeChannel.current && clearTimeout(timeoutChangeChannel.current);
+        if (newChannelNumberText.length >= MAX_CHANNEL_NUMBER_DIGITS) {
+            switchChannel();
         } else {
-            setChannelNumberText('');
+            timeoutChangeChannel.current = setTimeout(switchChannel, 2000);
         }
     };
 
@@ -300,6 +345,29 @@ const TV = () => {
 
         setAudioTracks(audioTracks);
         setTextTracks(textTracks);
+        updateVideoQuality();
+
+        // restore the selected subtitles, the tracks might be added later
+        if (textTracks) {
+            restoreTextTrack(textTracks, currentChannel.getName());
+            textTracks.onaddtrack = () => restoreTextTrack(textTracks, currentChannel.getName());
+        }
+    };
+
+    const restoreTextTrack = (textTracks: TextTrackList, channelName: string) => {
+        const index = StorageHelper.getLastTextTrackIndex(channelName);
+        if (index > 0 && index <= textTracks.length) {
+            for (let i = 0; i < textTracks.length; i++) {
+                textTracks[i].mode = i === index - 1 ? 'showing' : 'disabled';
+            }
+        }
+    };
+
+    const updateVideoQuality = () => {
+        const videoElement = getMediaElement();
+        setVideoQuality(
+            videoElement ? MediaUtils.getQualityLabel(videoElement.videoWidth, videoElement.videoHeight) : ''
+        );
     };
 
     const setAudioTracks = (audioTracks: AudioTrackList | undefined) => {
@@ -315,16 +383,72 @@ const TV = () => {
         timeoutStartStream.current = null;
     };
 
+    const clearStallTimeout = () => {
+        timeoutStall.current && clearTimeout(timeoutStall.current);
+        timeoutStall.current = null;
+    };
+
+    const clearReconnect = () => {
+        timeoutReconnect.current && clearTimeout(timeoutReconnect.current);
+        timeoutReconnect.current = null;
+    };
+
     const resetPlayer = (videoElement: HTMLVideoElement) => {
         cancelPendingStreamStart();
+        clearStallTimeout();
+        clearReconnect();
         setAudioTracks(undefined);
         setTextTracks(undefined);
+        setVideoQuality('');
         MediaUtils.resetVideoElement(videoElement);
+    };
+
+    /**
+     * the stream failed or stalls -> start it again, with an increasing delay between the attempts
+     */
+    const scheduleReconnect = (reason: string) => {
+        const videoElement = getMediaElement();
+        const currentChannel = getCurrentChannel();
+        if (!videoElement || !currentChannel || timeoutReconnect.current) return;
+        clearStallTimeout();
+
+        if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+            console.log('giving up to reconnect: %s', reason);
+            showMessage(t('The channel could not be played'));
+            return;
+        }
+
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 8000);
+        console.log('reconnecting in %dms: %s', delay, reason);
+        setIsVideoPlaying(false);
+        timeoutReconnect.current = setTimeout(() => {
+            timeoutReconnect.current = null;
+            reconnectAttempts.current++;
+            resetPlayer(videoElement);
+            startSource(videoElement, currentChannel.getStreamUrl());
+        }, delay);
+    };
+
+    const startStallTimeout = () => {
+        clearStallTimeout();
+        timeoutStall.current = setTimeout(() => scheduleReconnect('stalled'), STALL_TIMEOUT_MILLIS);
+    };
+
+    const handleVideoPlaying = () => {
+        clearStallTimeout();
+        reconnectAttempts.current = 0;
+        setIsVideoPlaying(true);
     };
 
     const startSource = (videoElement: HTMLVideoElement, dataUrl: URL) => {
         timeoutStartStream.current = null;
-        MediaUtils.attachSource(videoElement, dataUrl);
+        const lastSource = MediaUtils.attachSource(videoElement, dataUrl);
+        // fired if none of the sources could be played
+        lastSource.addEventListener('error', () => {
+            lastSource.parentNode === videoElement && scheduleReconnect('source error');
+        });
+        // the stream has to start within the stall timeout
+        startStallTimeout();
 
         // Auto-play video with some (unused) error handling
         const playPromise = videoElement.play();
@@ -340,6 +464,7 @@ const TV = () => {
 
         // stop the current stream right away, so tvheadend can release the tuner
         resetPlayer(videoElement);
+        reconnectAttempts.current = 0;
         setIsVideoPlaying(false);
 
         // start a single channel change immediately, but debounce fast zapping so we
@@ -388,9 +513,14 @@ const TV = () => {
     useEffect(() => {
         focus();
 
+        // react has no handler for the resize event of media elements
+        const videoElement = getMediaElement();
+        videoElement && videoElement.addEventListener('resize', updateVideoQuality);
+
         return () => {
-            timeoutPipMessage.current && clearTimeout(timeoutPipMessage.current);
-            const videoElement = getMediaElement();
+            videoElement && videoElement.removeEventListener('resize', updateVideoQuality);
+            timeoutMessage.current && clearTimeout(timeoutMessage.current);
+            timeoutChangeChannel.current && clearTimeout(timeoutChangeChannel.current);
             if (!videoElement) return;
             resetPlayer(videoElement);
         };
@@ -400,7 +530,13 @@ const TV = () => {
         // change channel in case we have channels retrieved and channel position changed
         if (epgData.getChannelCount() > 0) {
             const currentChannel = getCurrentChannel();
-            if (currentChannel && currentChannel.getChannelID() !== currentChannelPosition) {
+            if (currentChannel) {
+                // remember the channel we come from for the back button
+                if (shownChannelPosition.current !== null && shownChannelPosition.current !== currentChannelPosition) {
+                    previousChannelPosition.current = shownChannelPosition.current;
+                }
+                shownChannelPosition.current = currentChannelPosition;
+
                 updateStreamSource(currentChannel.getStreamUrl());
                 // store last used channel
                 StorageHelper.setLastChannelIndex(currentChannelPosition);
@@ -484,7 +620,7 @@ const TV = () => {
                 />
             )}
 
-            {pipMessage !== '' && <div className="pipMessage">{pipMessage}</div>}
+            {message !== '' && <div className="tvMessage">{message}</div>}
 
             {state === State.CHANNEL_SETTINGS && (
                 <ChannelSettings
@@ -497,6 +633,7 @@ const TV = () => {
 
             {state === State.CHANNEL_INFO && (
                 <ChannelInfo
+                    videoQuality={videoQuality}
                     unmount={() => {
                         setState(State.TV);
                         setChannelNumberText('');
@@ -525,8 +662,11 @@ const TV = () => {
                 height={getHeight()}
                 preload="none"
                 onLoadedMetadata={handleLoadedMetaData}
-                onPlaying={() => setIsVideoPlaying(true)}
+                onPlaying={handleVideoPlaying}
                 onPause={handleMainVideoPause}
+                onWaiting={startStallTimeout}
+                onError={() => scheduleReconnect('video error')}
+                onEnded={() => scheduleReconnect('stream ended')}
             ></video>
         </div>
     );

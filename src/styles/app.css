@@ -299,7 +299,7 @@ body {
     background-color: rgba(5, 16, 24, 0.8);
 }
 
-.pipMessage {
+.tvMessage {
     position: absolute;
     top: 150px;
     right: 40px;
@@ -309,4 +309,64 @@ body {
     z-index: 5;
     color: #cccccc;
     background-color: rgba(5, 16, 24, 0.9);
+}
+
+.channelListFooter {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 900px;
+    padding: 10px 20px;
+    box-sizing: border-box;
+    font-size: 24px;
+    color: #cccccc;
+    background-color: rgba(5, 16, 24, 0.9);
+}
+
+.epgGroup {
+    position: absolute;
+    left: 20px;
+    bottom: 15px;
+    font-size: 24px;
+    color: #cccccc;
+}
+
+.colorKey {
+    display: inline-block;
+    width: 20px;
+    height: 10px;
+    margin: 0 10px 0 20px;
+}
+
+.colorKey:first-child {
+    margin-left: 0;
+}
+
+.colorKey.yellow {
+    background-color: #fbc821;
+}
+
+.colorKey.blue {
+    background-color: #4065b8;
+}
+
+.search {
+    background-color: rgba(11, 39, 58, 0.95);
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: 3;
+}
+
+.search .searchResults {
+    height: 760px;
+}
+
+.channelListDetails .eventImage {
+    float: right;
+    max-width: 40%;
+    max-height: 220px;
+    margin: 10px 0 10px 15px;
 }

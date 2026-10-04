@@ -417,7 +417,7 @@ const RecordingList = (props: {
         }
 
         // pass unhandled events to parent
-        if (!event.isPropagationStopped) return event;
+        if (!event.isPropagationStopped()) return event;
     };
 
     const deleteRecording = (event: EPGEvent | undefined) => {

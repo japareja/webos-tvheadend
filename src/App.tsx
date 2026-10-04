@@ -8,13 +8,19 @@ import AppContext, { AppVisibilityState } from './AppContext';
 import EPGChannel from './models/EPGChannel';
 import StorageHelper from './utils/StorageHelper';
 import Menu, { MenuItem } from './components/Menu';
+import Search from './components/Search';
+import { setLocale as setI18nLocale, t } from './i18n/I18n';
+
+// how often we check if the epg needs to be refreshed
+const EPG_REFRESH_CHECK_MILLIS = 15 * 60 * 1000;
 
 export enum AppViewState {
     TV,
     SETTINGS,
     RECORDINGS,
     HELP,
-    CONTACT
+    CONTACT,
+    SEARCH
 }
 
 const App = () => {
@@ -40,31 +46,37 @@ const App = () => {
     const menu: MenuItem[] = [
         {
             icon: 'liveplayback',
-            label: 'TV',
+            label: t('TV'),
             action: () => updateAppViewState(AppViewState.TV),
             isActive: appViewState === AppViewState.TV
         },
         {
+            icon: 'search',
+            label: t('Search'),
+            action: () => updateAppViewState(AppViewState.SEARCH),
+            isActive: appViewState === AppViewState.SEARCH
+        },
+        {
             icon: 'recordings',
-            label: 'Recordings',
+            label: t('Recordings'),
             action: () => updateAppViewState(AppViewState.RECORDINGS),
             isActive: appViewState === AppViewState.RECORDINGS
         },
         {
             icon: 'gear',
-            label: 'Setup',
+            label: t('Setup'),
             action: () => updateAppViewState(AppViewState.SETTINGS),
             isActive: appViewState === AppViewState.SETTINGS
         },
         {
             icon: 'denselist',
-            label: 'Help',
+            label: t('Help'),
             action: () => console.log('not yet available') /*action: () => updateAppViewState(AppViewState.HELP)*/,
             isActive: false
         },
         {
             icon: 'circle',
-            label: 'Contact',
+            label: t('Contact'),
             action: () => console.log('not yet available') /*action: () => updateAppViewState(AppViewState.CONTACT)*/,
             isActive: false
         }
@@ -79,12 +91,12 @@ const App = () => {
         if (!tvhDataService) {
             return;
         }
-        setDebugInfo("Connecting...");
+        setDebugInfo(t('Connecting...'));
         // await readyness
         try {
             await tvhDataService.awaitReadyness();
         } catch (error) {
-            setDebugInfo('Failed to connect to TVH: '+ + JSON.stringify(error));
+            setDebugInfo(t('Failed to connect to TVH: {0}', JSON.stringify(error)));
             setAppViewState(AppViewState.SETTINGS);
             return;
         }
@@ -101,7 +113,7 @@ const App = () => {
         setIsChannelsRetrieved(false);
 
         try {
-            setDebugInfo("Loading channels...");
+            setDebugInfo(t('Loading channels...'));
             const channels = await tvhDataService.retrieveM3UChannels();
             setDebugInfo("Updating channels ("+channels.length+")...");
             epgData.updateChannels(channels);
@@ -117,9 +129,12 @@ const App = () => {
             // preload images
             preloadImages(channels);
 
+            // retrieve channel tags for the channel groups
+            tvhDataService.retrieveChannelTags().then((tags) => epgData.updateTags(tags));
+
             setDebugInfo("Retrieve EPG...");
             // retrieve epg and update channels
-            tvhDataService.retrieveTVHEPG(0, (channels) => {
+            tvhDataService.retrieveTVHEPG((channels) => {
                 // note: channels are already updated as we are working on references here
                 epgData.updateChannels(channels);
             });
@@ -130,7 +145,7 @@ const App = () => {
                 epgData.updateRecordings(recordings);
             });
         } catch (error) {
-            setDebugInfo('Failed to retrieve channels: '+ JSON.stringify(error));
+            setDebugInfo(t('Failed to retrieve channels: {0}', JSON.stringify(error)));
             setAppViewState(AppViewState.SETTINGS);
             return;
         }
@@ -144,6 +159,7 @@ const App = () => {
             // retrieve local info
             const localInfoResult = await tvhDataService.getLocaleInfo();
             const locale = localInfoResult.settings.localeInfo.locales.UI;
+            setI18nLocale(locale);
             setLocale(locale);
             console.log('Retrieved locale info:', locale);
         } catch (error) {
@@ -168,6 +184,7 @@ const App = () => {
         if (authParam) {
             // put auth token to app context
             setPersistentAuthToken(authParam.trim());
+            tvhDataService?.setAuthToken(authParam.trim());
         }
     };
 
@@ -272,6 +289,16 @@ const App = () => {
 
     useEffect(() => {
         reloadData();
+
+        // keep the epg up to date while the app is running
+        const refreshInterval = setInterval(() => {
+            if (tvhDataService?.isEpgRefreshDue()) {
+                console.log('refreshing epg');
+                tvhDataService.retrieveTVHEPG((channels) => epgData.updateChannels(channels), true);
+            }
+        }, EPG_REFRESH_CHECK_MILLIS);
+
+        return () => clearInterval(refreshInterval);
     }, [tvhDataService]);
 
     return (
@@ -281,6 +308,7 @@ const App = () => {
             {appViewState === AppViewState.SETTINGS && <TVHSettings unmount={() => setAppViewState(AppViewState.TV)} />}
             {appViewState === AppViewState.TV && isChannelsRetrieved && <TV />}
             {appViewState === AppViewState.RECORDINGS && <Player />}
+            {appViewState === AppViewState.SEARCH && <Search unmount={() => setAppViewState(AppViewState.TV)} />}
         </div>
     );
 };

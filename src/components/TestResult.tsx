@@ -2,6 +2,7 @@ import BodyText from '@enact/moonstone/BodyText';
 import React from 'react';
 import TestResultItem from './TestResultItem';
 import { TestResults } from '../utils/TVHSettingsTest';
+import { t } from '../i18n/I18n';
 
 const TestResult = (results: TestResults) => (
     <>
@@ -20,7 +21,7 @@ const TestResult = (results: TestResults) => (
         </BodyText>
         {!results.serverInfo.accessible && (
             <BodyText>
-                App user needs TVHeadend "Web" privileges to handle EPG, DVR and version specific handling
+                {t('App user needs TVHeadend "Web" privileges to handle EPG, DVR and version specific handling')}
             </BodyText>
         )}
     </>

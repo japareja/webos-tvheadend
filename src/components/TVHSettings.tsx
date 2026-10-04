@@ -9,6 +9,7 @@ import TVHSettingsTest, { TestResults } from '../utils/TVHSettingsTest';
 import AppContext from '../AppContext';
 import TestResult from './TestResult';
 import StorageHelper, { PipSettings } from '../utils/StorageHelper';
+import { t } from '../i18n/I18n';
 
 const TVHSettings = (props: { unmount: () => void }) => {
     const { tvhDataService, setTvhDataService } = useContext(AppContext);
@@ -71,7 +72,8 @@ const TVHSettings = (props: { unmount: () => void }) => {
         const result = await tester.testAll();
 
         setTestResults({ ...result });
-        setServiceParms({ ...serviceParms, dvrUuid: testResults?.dvr.payload });
+        // use the dvr config of this test, the state still holds the previous results
+        setServiceParms({ ...serviceParms, dvrUuid: result.dvr.payload });
         setConnectButtonEnabled(true);
         setIsLoading(false);
     };
@@ -102,8 +104,8 @@ const TVHSettings = (props: { unmount: () => void }) => {
     return (
         <div id="tvh-settings" ref={tvhSettingsWrapper} tabIndex={-1} className="tvhSettings">
             <Panel>
-                <Header title="TVheadend Setup" type="compact" centered />
-                <Heading spacing="auto">TVheadend URL</Heading>
+                <Header title={t('TVheadend Setup')} type="compact" centered />
+                <Heading spacing="auto">{t('TVheadend URL')}</Heading>
                 <Input
                     value={serviceParms.tvhUrl}
                     type="url"
@@ -115,21 +117,21 @@ const TVHSettings = (props: { unmount: () => void }) => {
                     value={serviceParms.user}
                     type="text"
                     onChange={handleUserChange}
-                    placeholder="User (Optional)"
+                    placeholder={t('User (Optional)')}
                 />
                 <Input
                     className="password"
                     value={serviceParms.password}
                     type="password"
                     onChange={handlePasswordChange}
-                    placeholder="Password (Optional)"
+                    placeholder={t('Password (Optional)')}
                 />
-                <Heading spacing="auto">Picture in Picture</Heading>
+                <Heading spacing="auto">{t('Picture in Picture')}</Heading>
                 <Input
                     value={pipSettings.profile}
                     type="text"
                     onChange={handlePipProfileChange}
-                    placeholder="Streaming profile (Optional)"
+                    placeholder={t('Streaming profile (Optional)')}
                 />
                 <br /> <br />
                 {!isLoading && (
@@ -138,17 +140,17 @@ const TVHSettings = (props: { unmount: () => void }) => {
                         backgroundOpacity="lightTranslucent"
                         onClick={handleConnectionTest}
                     >
-                        Connect
+                        {t('Connect')}
                     </Button>
                 )}
                 {isLoading && <Spinner component={Panel} size="medium" />}
                 <Button disabled={!isValid} backgroundOpacity="lightTranslucent" onClick={handleSave}>
-                    Save
+                    {t('Save')}
                 </Button>
                 <br /> <br />
                 {testResults && (
                     <>
-                        <Heading spacing="auto">Connection Test Results</Heading>
+                        <Heading spacing="auto">{t('Connection Test Results')}</Heading>
                         <TestResult {...testResults} />
                     </>
                 )}

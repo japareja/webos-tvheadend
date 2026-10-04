@@ -4,14 +4,18 @@ import EPGUtils from '../utils/EPGUtils';
 import CanvasUtils, { WriteTextOptions } from '../utils/CanvasUtils';
 import AppContext from '../AppContext';
 import '../styles/app.css';
+import { t } from '../i18n/I18n';
 
-const ChannelInfo = (props: { unmount: () => void }) => {
+const ChannelInfo = (props: { videoQuality?: string; unmount: () => void }) => {
     const { locale, epgData, imageCache, currentChannelPosition } = useContext(AppContext);
 
     const canvas = useRef<HTMLCanvasElement>(null);
     const infoWrapper = useRef<HTMLDivElement>(null);
     const timeoutReference = useRef<NodeJS.Timeout | null>(null);
     const intervalReference = useRef<NodeJS.Timeout | null>(null);
+    // the interval redraws with an old closure, so the latest quality is read from a ref
+    const videoQuality = useRef(props.videoQuality);
+    videoQuality.current = props.videoQuality;
 
     const mChannelInfoHeight = 150;
     const mChannelInfoTitleSize = 42;
@@ -40,7 +44,7 @@ const ChannelInfo = (props: { unmount: () => void }) => {
         }
 
         // pass unhandled events to parent
-        if (!event.isPropagationStopped) return event;
+        if (!event.isPropagationStopped()) return event;
     };
 
     const drawChannelInfo = (canvas: CanvasRenderingContext2D) => {
@@ -229,8 +233,8 @@ const ChannelInfo = (props: { unmount: () => void }) => {
             canvas.fillRect(drawingRect.left, drawingRect.top, mChannelInfoKeyRectWidth, 10);
 
             drawingRect.left += mChannelInfoKeyRectWidth + mChannelLayoutPadding;
-            const recMetrics = canvas.measureText('Rec');
-            CanvasUtils.writeText(canvas, 'Rec', drawingRect.left, drawingRect.top + 5);
+            const recMetrics = canvas.measureText(t('Rec'));
+            CanvasUtils.writeText(canvas, t('Rec'), drawingRect.left, drawingRect.top + 5);
 
             // green
             drawingRect.left += recMetrics.width + mChannelLayoutPadding + mChannelInfoKeyPadding;
@@ -238,8 +242,8 @@ const ChannelInfo = (props: { unmount: () => void }) => {
             canvas.fillRect(drawingRect.left, drawingRect.top, mChannelInfoKeyRectWidth, 10);
 
             drawingRect.left += mChannelInfoKeyRectWidth + mChannelLayoutPadding;
-            const menuMetrics = canvas.measureText('Menu');
-            CanvasUtils.writeText(canvas, 'Menu', drawingRect.left, drawingRect.top + 5);
+            const menuMetrics = canvas.measureText(t('Menu'));
+            CanvasUtils.writeText(canvas, t('Menu'), drawingRect.left, drawingRect.top + 5);
 
             // yellow
             drawingRect.left += menuMetrics.width + mChannelLayoutPadding + mChannelInfoKeyPadding;
@@ -247,8 +251,8 @@ const ChannelInfo = (props: { unmount: () => void }) => {
             canvas.fillRect(drawingRect.left, drawingRect.top, mChannelInfoKeyRectWidth, 10);
 
             drawingRect.left += mChannelInfoKeyRectWidth + mChannelLayoutPadding;
-            const audioMetrics = canvas.measureText('Audio');
-            CanvasUtils.writeText(canvas, 'Audio', drawingRect.left, drawingRect.top + 5);
+            const audioMetrics = canvas.measureText(t('Audio'));
+            CanvasUtils.writeText(canvas, t('Audio'), drawingRect.left, drawingRect.top + 5);
 
             // blue
             drawingRect.left += audioMetrics.width + mChannelLayoutPadding + mChannelInfoKeyPadding;
@@ -256,7 +260,17 @@ const ChannelInfo = (props: { unmount: () => void }) => {
             canvas.fillRect(drawingRect.left, drawingRect.top, mChannelInfoKeyRectWidth, 10);
 
             drawingRect.left += mChannelInfoKeyRectWidth + mChannelLayoutPadding;
-            CanvasUtils.writeText(canvas, 'EPG', drawingRect.left, drawingRect.top + 5);
+            CanvasUtils.writeText(canvas, t('EPG'), drawingRect.left, drawingRect.top + 5);
+
+            // draw video quality of the stream
+            if (videoQuality.current) {
+                CanvasUtils.writeText(canvas, videoQuality.current, getWidth() - mChannelLayoutPadding - 20, 22, {
+                    fontSize: mChannelInfoKeyDescSize,
+                    fillStyle: 'rgb(65, 182, 230)',
+                    textAlign: 'right',
+                    isBold: true
+                });
+            }
 
             // draw upcoming progress
             const channelEventProgressRect = new Rect(0, 0, 6, getWidth());
@@ -354,6 +368,10 @@ const ChannelInfo = (props: { unmount: () => void }) => {
         updateCanvas();
         resetUnmountTimeout();
     }, [currentChannelPosition]);
+
+    useEffect(() => {
+        updateCanvas();
+    }, [props.videoQuality]);
 
     const focus = () => {
         infoWrapper.current?.focus();

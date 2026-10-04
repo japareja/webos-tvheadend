@@ -2,6 +2,7 @@ import Icon from '@enact/moonstone/Icon';
 import Picker from '@enact/moonstone/Picker';
 import React, { useEffect, useRef, useState } from 'react';
 import StorageHelper from '../utils/StorageHelper';
+import { t } from '../i18n/I18n';
 
 const ChannelSettings = (props: {
     channelName: string;
@@ -20,17 +21,16 @@ const ChannelSettings = (props: {
     const handleTextChange = (event: { value: number }) => {
         updateAutomaticUnmount();
 
-        // enable new track
+        // show the selected track, value 0 means subtitles off
         if (props.textTracks) {
             for (let i = 0; i < props.textTracks.length; i++) {
-                // const textTrack = props.textTracks[i];
-                // textTrack.enabled = (event.value === i);
+                props.textTracks[i].mode = event.value === i + 1 ? 'showing' : 'disabled';
             }
         }
         setSelectedTextTrack(event.value);
 
-        // TODO: save selected text track index for channel
-        // localStorage.setItem(props.channelName, event.value);
+        // save selected text track index for channel
+        StorageHelper.setLastTextTrackIndex(props.channelName, event.value);
 
         // do not pass this event further
         return false;
@@ -73,7 +73,7 @@ const ChannelSettings = (props: {
         }
 
         // pass unhandled events to parent
-        if (!event.isPropagationStopped) return event;
+        if (!event.isPropagationStopped()) return event;
     };
 
     const setSelectedAudioTrack = (index: number) => {
@@ -99,17 +99,20 @@ const ChannelSettings = (props: {
         if (props.audioTracks) {
             for (let i = 0; i < props.audioTracks.length; i++) {
                 const audioTrack = props.audioTracks[i];
-                setAudioTracksDisplay((audioTracksDisplay) => [...audioTracksDisplay, audioTrack.language]);
+                const label = audioTrack.language || audioTrack.label || t('Track {0}', i + 1);
+                setAudioTracksDisplay((audioTracksDisplay) => [...audioTracksDisplay, label]);
                 audioTrack.enabled && setSelectedAudioTrack(i);
             }
         }
 
-        if (props.textTracks) {
+        if (props.textTracks && props.textTracks.length > 0) {
+            const textTracksLabels = [t('Off')];
             for (let i = 0; i < props.textTracks.length; i++) {
                 const textTrack = props.textTracks[i];
-                setTextTracksDisplay((textTracksDisplay) => [...textTracksDisplay, textTrack.language]);
-                // textTrack.enabled && setSelectedTextTrack(i);
+                textTracksLabels.push(textTrack.language || textTrack.label || t('Track {0}', i + 1));
+                textTrack.mode === 'showing' && setSelectedTextTrack(i + 1);
             }
+            setTextTracksDisplay(textTracksLabels);
         }
 
         // automatic unmount

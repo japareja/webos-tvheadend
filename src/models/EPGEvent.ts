@@ -11,8 +11,9 @@ export default class EPGEvent {
         private title: string,
         private description: string,
         private subTitle: string,
-        private channelUuid: string
-    ) { }
+        private channelUuid: string,
+        private image?: string
+    ) {}
 
     getId() {
         return this.id;
@@ -56,6 +57,13 @@ export default class EPGEvent {
 
     getSubTitle() {
         return this.subTitle;
+    }
+
+    /**
+     * url of the program image, if the epg provides one
+     */
+    getImage() {
+        return this.image;
     }
 
     getChannelUuid() {

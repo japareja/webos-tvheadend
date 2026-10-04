@@ -5,6 +5,8 @@ import EPGEvent from './EPGEvent';
  */
 export default class EPGChannel {
     private events: EPGEvent[];
+    // uuids of the tvheadend channel tags of this channel
+    private tags: string[] = [];
 
     constructor(
         protected icon: URL | undefined,
@@ -42,6 +44,14 @@ export default class EPGChannel {
 
     addEvent(event: EPGEvent) {
         this.events.push(event);
+    }
+
+    getTags() {
+        return this.tags;
+    }
+
+    setTags(tags: string[]) {
+        this.tags = tags;
     }
 
     getStreamUrl() {

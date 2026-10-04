@@ -1,5 +1,6 @@
 import Config from '../config/Config';
 import TVHDataService from '../services/TVHDataService';
+import { t } from '../i18n/I18n';
 
 export interface TestResults {
     firmwareInfo: ResultItem;
@@ -56,7 +57,7 @@ export default class TVHSettingsTest {
 
     testWebosFirmwareVersion = async () => {
         return Config.lunaServiceAdapter.getDeviceInfo().then((deviceInfo) => {
-            const firmwareVersionLabel = 'Device Info: ';
+            const firmwareVersionLabel = t('Device Info: ');
             const firmwareVersionResult = this.toResult(
                 firmwareVersionLabel,
                 true,
@@ -75,7 +76,7 @@ export default class TVHSettingsTest {
     };
 
     testServerInfo = async () => {
-        const serverInfoLabel = 'Server Info: ';
+        const serverInfoLabel = t('Server Info: ');
 
         return this.tvhService
             .retrieveServerInfo()
@@ -91,13 +92,13 @@ export default class TVHSettingsTest {
     };
 
     testPlaylist = async () => {
-        const playListLabel = 'Playlist: ';
+        const playListLabel = t('Playlist: ');
 
         return this.tvhService
             .retrieveM3UChannels()
             .then((channels) => {
                 const streamUrl = channels[0] && channels[0].getStreamUrl();
-                const resultItem = this.toResult(playListLabel, true, 'loaded ' + channels.length + ' channels');
+                const resultItem = this.toResult(playListLabel, true, t('loaded {0} channels', channels.length));
                 return { playlistResult: resultItem, streamUrl };
             })
             .catch((error) => {
@@ -107,39 +108,39 @@ export default class TVHSettingsTest {
     };
 
     testChannelStream = async (streamUrl: string | URL | null) => {
-        const streamLabel = 'Stream: ';
+        const streamLabel = t('Stream: ');
 
         if (streamUrl) {
             // stream url is called via frontend (video element) and can therfore not provice any credentials
             // so our test needs to be without credentials
             return this.tvhService
                 .retrieveTest(streamUrl, false)
-                .then(() => this.toResult(streamLabel, true, 'verified access to video stream'))
+                .then(() => this.toResult(streamLabel, true, t('verified access to video stream')))
                 .catch((error) => this.toResult(streamLabel, false, this.getErrorTextStream(error)));
         } else {
             return this.toResult(
                 streamLabel,
                 false,
-                'No channels available - verification of channel stream not possible'
+                t('No channels available - verification of channel stream not possible')
             );
         }
     };
 
     testEpg = async () => {
-        const epgLabel = 'EPG: ';
+        const epgLabel = t('EPG: ');
 
         return this.tvhService
             .retrieveTVEPGTest()
-            .then(() => this.toResult(epgLabel, true, 'verified access to EPG'))
+            .then(() => this.toResult(epgLabel, true, t('verified access to EPG')))
             .catch((error) => this.toResult(epgLabel, false, this.getErrorText(error)));
     };
 
     testDvr = async () => {
-        const dvrLabel = 'DVR: ';
+        const dvrLabel = t('DVR: ');
 
         return this.tvhService
             .retrieveDVRConfig()
-            .then(() => this.toResult(dvrLabel, true, 'verified access to DVR'))
+            .then((dvrUuid) => this.toResult(dvrLabel, true, t('verified access to DVR'), dvrUuid))
             .catch((error) => this.toResult(dvrLabel, false, this.getErrorText(error)));
     };
 
@@ -157,10 +158,10 @@ export default class TVHSettingsTest {
         const isForbidden = error.statusCode && error.statusCode === 403;
         let errorText = error.errorText || error.message;
         if (isUnauthorized) {
-            errorText = 'User authentication is required or provided user/password is wrong';
+            errorText = t('User authentication is required or provided user/password is wrong');
         }
         if (isForbidden) {
-            errorText = 'User is missing privileges please verify user setup in tvheadend';
+            errorText = t('User is missing privileges please verify user setup in tvheadend');
         }
         return errorText;
     }
@@ -170,11 +171,12 @@ export default class TVHSettingsTest {
         const isForbidden = error.statusCode && error.statusCode === 403;
         let errorText = error.errorText || error.message;
         if (isUnauthorized) {
-            errorText =
-                'Using Version 4.3 with User Authentication requires activation of "Persistence Token" in the Users Password setttings of TVHeadend';
+            errorText = t(
+                'Using Version 4.3 with User Authentication requires activation of "Persistence Token" in the Users Password setttings of TVHeadend'
+            );
         }
         if (isForbidden) {
-            errorText = 'User is missing privileges to access the stream url';
+            errorText = t('User is missing privileges to access the stream url');
         }
         return errorText;
     }

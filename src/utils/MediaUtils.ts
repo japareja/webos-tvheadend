@@ -66,6 +66,22 @@ export default class MediaUtils {
     }
 
     /**
+     * Short quality label for the video resolution, e.g. 'UHD 3840x2160'
+     */
+    static getQualityLabel(width: number, height: number) {
+        if (!width || !height) {
+            return '';
+        }
+        let label = 'SD';
+        if (width >= 3200 || height >= 1800) {
+            label = 'UHD';
+        } else if (width >= 1200 || height >= 700) {
+            label = 'HD';
+        }
+        return label + ' ' + width + 'x' + height;
+    }
+
+    /**
      * Stop the current playback and release the stream (and with that the tvheadend subscription)
      */
     static resetVideoElement(videoElement: HTMLVideoElement) {

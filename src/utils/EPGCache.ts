@@ -14,6 +14,7 @@ interface EPGEventObject {
     description: string;
     subTitle: string;
     channelUuid: string;
+    image?: string;
 }
 
 const combineEvents = (previousEvents: ChannelEvents, currentEvents: ChannelEvents): ChannelEvents => {
@@ -50,7 +51,8 @@ const getChannelEvents = (channels: EPGChannel[]) => {
                 title: event.getTitle(),
                 description: event.getDescription(),
                 subTitle: event.getSubTitle(),
-                channelUuid: event.getChannelUuid()
+                channelUuid: event.getChannelUuid(),
+                image: event.getImage()
             };
             return eventObject;
         });
@@ -61,11 +63,11 @@ const getChannelEvents = (channels: EPGChannel[]) => {
 
 const setChannelEvents = (channels: EPGChannel[], channelEvents: ChannelEvents) => {
     channels.forEach((channel) => {
-        const epgEvents = channelEvents[channel.getUUID()];
+        const epgEvents = channelEvents[channel.getUUID()] || [];
         channel.setEvents(
             epgEvents.map((epgEventObject) => {
-                const { id, start, end, title, description, subTitle, channelUuid } = epgEventObject;
-                return new EPGEvent(id, start, end, title, description, subTitle, channelUuid);
+                const { id, start, end, title, description, subTitle, channelUuid, image } = epgEventObject;
+                return new EPGEvent(id, start, end, title, description, subTitle, channelUuid, image);
             })
         );
     });

@@ -5,6 +5,9 @@ import EPGChannelRecording, { EPGChannelRecordingKind } from '../models/EPGChann
 import EPGCacheService from './EPGCacheService';
 import WebOSService from './WebOSService';
 import Config from '../config/Config';
+import EPGUtils from '../utils/EPGUtils';
+import { ChannelGroup } from '../models/EPGData';
+import { t } from '../i18n/I18n';
 
 export interface TVHDataServiceParms {
     tvhUrl: string;
@@ -32,6 +35,15 @@ interface TVHEventEntry {
     description: string;
     subtitle: string;
     channelUuid: string;
+    image?: string;
+}
+
+interface TVHChannelTags {
+    entries: { key: string; val: string }[];
+}
+
+interface TVHChannelGrid {
+    entries: { uuid: string; tags?: string[] }[];
 }
 
 interface TVHRecordings<T extends EPGChannelRecordingKind> {
@@ -83,6 +95,13 @@ export default class TVHDataService {
     static API_EPG_TEST = 'api/epg/events/grid?dir=ASC&sort=start&limit=1&start=0';
     static EPG_PAGE_SIZE = 500;
     static EPG_PARALLEL_REQUESTS = 4;
+    // the epg is loaded for this time range, and refreshed in the given interval
+    static EPG_HORIZON_MILLIS = 36 * 60 * 60 * 1000;
+    static EPG_REFRESH_MILLIS = 6 * 60 * 60 * 1000;
+    // safety limit for the number of epg events
+    static EPG_MAX_ENTRIES = 60000;
+    static API_CHANNEL_TAGS = 'api/channeltag/list';
+    static API_CHANNEL_GRID = 'api/channel/grid?limit=100000';
     static API_EPG = 'api/epg/events/grid?dir=ASC&sort=start&limit=' + TVHDataService.EPG_PAGE_SIZE + '&start=';
     static API_DVR_CONFIG = 'api/dvr/config/grid';
     static API_DVR_CREATE_BY_EVENT = 'api/dvr/entry/create_by_event?';
@@ -97,8 +116,10 @@ export default class TVHDataService {
     private httpProxyServiceAdapter = Config.httpProxyServiceAdapter;
     private epgCacheService = new EPGCacheService();
     private webosService = new WebOSService();
-    private maxTotalEpgEntries = 10000;
     private channels: EPGChannel[] = [];
+    private isEpgLoading = false;
+    private epgLoadedAt = 0;
+    private authToken?: string;
     private url?: string;
     // private profile: string;
     private dvrUuid?: number;
@@ -117,12 +138,9 @@ export default class TVHDataService {
     }
 
     async awaitReadyness() {
-        try {
-            await this.waitUntilLunaServiceAvailable(1);
-        }
-        catch (error) {
-            console.log('LunaService not available: ', error);
-            return Promise.reject('LunaService not available');
+        // continue even if the luna service or the network don't report ready, the requests will tell
+        if (!(await this.waitUntilLunaServiceAvailable())) {
+            console.log('LunaService not available, trying anyway');
         }
 
         // wait until service is avaialble
@@ -133,60 +151,63 @@ export default class TVHDataService {
             return Promise.reject('HttpProxyService not available');
         }
 
-        // wait until network is available
-        try {
-            await this.waitUntilNetworkAvailable(1);
-        }
-        catch (error) {
-            console.log('Network not available: ', error);
-            return Promise.reject('Network not available');
+        if (!(await this.waitUntilNetworkAvailable())) {
+            console.log('Network not available, trying anyway');
         }
 
         return Promise.resolve();
     }
 
-    async waitUntilLunaServiceAvailable(count: number) {
-        if (count > 5) {
-            return Promise.reject('LunaService not available');
-        }
-        try {
-            const isAvailable = await this.webosService.isAvailable();
-            if (isAvailable) {
-                return Promise.resolve();
-            }
-        } catch (error) {
-            console.log('LunaService not available: retry '+count, error);
-        }
-
-         // if no network type is connected we wait 2s and try again
-        setTimeout(() => {
-            this.waitUntilLunaServiceAvailable(count + 1);
-        }, 2000);
-
+    private static sleep(millis: number) {
+        return new Promise((resolve) => setTimeout(resolve, millis));
     }
 
-    async waitUntilNetworkAvailable(count: number) {
-        if (count > 5) {
-            return Promise.reject('Network not available');
-        }
-        try {
-            const networkInfo = await Config.lunaServiceAdapter.getNetworkInfo();
-            console.log('networkInfo', networkInfo);
-            if (
-                networkInfo.wired.state === 'connected' ||
-                networkInfo.wifi.state === 'connected' ||
-                networkInfo.wifiDirect.state === 'connected'
-            ) {
-                return Promise.resolve();
+    /**
+     * wait up to 5 tries (2s apart) for the luna service
+     */
+    async waitUntilLunaServiceAvailable() {
+        for (let count = 1; count <= 5; count++) {
+            try {
+                if (await this.webosService.isAvailable()) {
+                    return true;
+                }
+            } catch (error) {
+                console.log('LunaService not available: retry ' + count, error);
             }
-        } catch (error) {
-            console.log('Network not available: retry '+count, error);
+            await TVHDataService.sleep(2000);
         }
+        return false;
+    }
 
-        // if no network type is connected we wait 2s and try again
-        setTimeout(() => {
-            this.waitUntilNetworkAvailable(count + 1);
-        }, 2000);
+    /**
+     * wait up to 5 tries (2s apart) for a network connection
+     */
+    async waitUntilNetworkAvailable() {
+        for (let count = 1; count <= 5; count++) {
+            try {
+                const networkInfo = await Config.lunaServiceAdapter.getNetworkInfo();
+                console.log('networkInfo', networkInfo);
+                if (
+                    networkInfo.isInternetConnectionAvailable ||
+                    networkInfo.wired?.state === 'connected' ||
+                    networkInfo.wifi?.state === 'connected' ||
+                    networkInfo.wifiDirect?.state === 'connected'
+                ) {
+                    return true;
+                }
+            } catch (error) {
+                console.log('Network not available: retry ' + count, error);
+            }
+            await TVHDataService.sleep(2000);
+        }
+        return false;
+    }
+
+    /**
+     * persistent auth token, used to load images from the tvheadend image cache
+     */
+    setAuthToken(authToken: string) {
+        this.authToken = authToken;
     }
 
     /**
@@ -235,7 +256,7 @@ export default class TVHDataService {
                 console.log('created record: %s', event.getTitle());
 
                 // toast information
-                this.webosService.showToastMessage('Added DVR entry: ' + event.getTitle());
+                this.webosService.showToastMessage(t('Added DVR entry: {0}', event.getTitle()));
 
                 // update upcoming recordings
                 this.retrieveUpcomingRecordings(callback);
@@ -257,7 +278,7 @@ export default class TVHDataService {
                 console.log('cancelled record: %s', event.getTitle());
 
                 // toast information
-                this.webosService.showToastMessage('Cancelled DVR entry: ' + event.getTitle());
+                this.webosService.showToastMessage(t('Cancelled DVR entry: {0}', event.getTitle()));
 
                 // update upcoming recordings
                 this.retrieveRecordings(authToken).then((recordings) => callback(recordings));
@@ -279,7 +300,7 @@ export default class TVHDataService {
                 console.log('deleted record: %s', event.getTitle());
 
                 // toast information
-                this.webosService.showToastMessage('Deleted DVR entry: ' + event.getTitle());
+                this.webosService.showToastMessage(t('Deleted DVR entry: {0}', event.getTitle()));
 
                 // retrieve recordings
                 this.retrieveRecordings(authToken).then((recordings) => callback(recordings));
@@ -371,8 +392,27 @@ export default class TVHDataService {
             tvhEvent.title,
             tvhEvent.description,
             tvhEvent.subtitle,
-            tvhEvent.channelUuid
+            tvhEvent.channelUuid,
+            this.toImageUrl(tvhEvent.image)
         );
+    }
+
+    /**
+     * epg images are either absolute urls or relative to the tvheadend url (image cache)
+     */
+    private toImageUrl(image?: string) {
+        if (!image) {
+            return undefined;
+        }
+        if (/^https?:\/\//i.test(image)) {
+            return image;
+        }
+        if (image.indexOf('://') >= 0) {
+            // e.g. file:// urls are not reachable from the tv
+            return undefined;
+        }
+        const authParam = this.authToken ? (image.indexOf('?') >= 0 ? '&' : '?') + 'auth=' + this.authToken : '';
+        return this.url + image.replace(/^\//, '') + authParam;
     }
 
     toEpgEventRec(recordingEntry: TVHRecordingEntry) {
@@ -476,13 +516,24 @@ export default class TVHDataService {
                 password: this.password
             });
 
+            // start from scratch, in case channels are reloaded
+            this.channels = [];
             if (result) {
                 const parserResult = M3UParser.parse(result);
-                parserResult.items.forEach((item) => {
+                const channelNumbers = parserResult.items.map((item) => parseFloat(item.channelNumber));
+                // channels without a number in tvheadend are numbered after the highest channel number
+                let nextFreeNumber =
+                    channelNumbers.reduce((max, number) => (number > max ? number : max), 0) || 0;
+                parserResult.items.forEach((item, index) => {
+                    let channelNumber = channelNumbers[index];
+                    if (!(channelNumber > 0)) {
+                        nextFreeNumber = Math.floor(nextFreeNumber) + 1;
+                        channelNumber = nextFreeNumber;
+                    }
                     const channel = new EPGChannel(
                         item.logoUrl && item.logoUrl.length > 0 ? new URL(item.logoUrl) : undefined,
                         item.channelName,
-                        this.channels.length + 1, // use our own numbers item.channelNumber
+                        channelNumber,
                         item.channelId,
                         new URL(item.streamUrl)
                     );
@@ -527,48 +578,113 @@ export default class TVHDataService {
     }
 
     /**
-     * Retrieve the epg in pages. The first page tells us how many events there are, the remaining
-     * pages are then requested with a few requests in parallel, but processed in order, so the
-     * events of each channel stay sorted by start time.
+     * Retrieve the channel tags of tvheadend and assign them to the channels.
+     * Returns the tags that are used by at least one channel.
      */
-    async retrieveTVHEPG(start: number, callback: EPGCallback) {
+    async retrieveChannelTags(): Promise<ChannelGroup[]> {
+        try {
+            const [tagResponse, channelResponse] = await Promise.all([
+                this.httpProxyServiceAdapter.call<TVHChannelTags>({
+                    url: this.url + TVHDataService.API_CHANNEL_TAGS,
+                    user: this.user,
+                    password: this.password
+                }),
+                this.httpProxyServiceAdapter.call<TVHChannelGrid>({
+                    url: this.url + TVHDataService.API_CHANNEL_GRID,
+                    user: this.user,
+                    password: this.password
+                })
+            ]);
+
+            const tagsByChannel = new Map<string, string[]>();
+            (channelResponse.entries || []).forEach((entry) => tagsByChannel.set(entry.uuid, entry.tags || []));
+
+            const usedTags = new Set<string>();
+            this.channels.forEach((channel) => {
+                const tags = tagsByChannel.get(channel.getUUID()) || [];
+                channel.setTags(tags);
+                tags.forEach((tag) => usedTags.add(tag));
+            });
+
+            return (tagResponse.entries || [])
+                .filter((tag) => usedTags.has(tag.key))
+                .map((tag) => ({ id: tag.key, name: tag.val }));
+        } catch (error) {
+            console.log('Failed to retrieve channel tags: ', JSON.stringify(error));
+            return [];
+        }
+    }
+
+    /**
+     * true if the loaded epg is old enough to be refreshed
+     */
+    isEpgRefreshDue() {
+        return (
+            !this.isEpgLoading &&
+            this.epgLoadedAt > 0 &&
+            Date.now() - this.epgLoadedAt > TVHDataService.EPG_REFRESH_MILLIS
+        );
+    }
+
+    /**
+     * Retrieve the epg for the next hours (EPG_HORIZON_MILLIS) in pages.
+     *
+     * The events are sorted by start time, so we can stop as soon as a page reaches the horizon.
+     * Pages are requested with a few requests in parallel, but processed in order, so the events
+     * of each channel stay sorted by start time.
+     *
+     * On the first load the channels are filled while loading, so the guide shows up early. A refresh
+     * collects the events first and replaces them at the end, so the guide stays complete meanwhile.
+     */
+    async retrieveTVHEPG(callback: EPGCallback, isRefresh = false) {
+        if (this.isEpgLoading) {
+            return;
+        }
+        this.isEpgLoading = true;
+
         const channelsByUuid = new Map<string, EPGChannel>();
         this.channels.forEach((channel) => channelsByUuid.set(channel.getUUID(), channel));
+        const refreshedEvents = new Map<string, EPGEvent[]>();
+        const horizon = EPGUtils.getNow() + TVHDataService.EPG_HORIZON_MILLIS;
+
+        const addEvents = (page: TVHEvents) => {
+            page.entries.forEach((tvhEvent) => {
+                const channel = channelsByUuid.get(tvhEvent.channelUuid);
+                if (!channel) return;
+                const event = this.toEpgEvent(tvhEvent);
+                if (isRefresh) {
+                    const events = refreshedEvents.get(tvhEvent.channelUuid) || [];
+                    events.push(event);
+                    refreshedEvents.set(tvhEvent.channelUuid, events);
+                } else {
+                    channel.addEvent(event);
+                }
+            });
+        };
+        const isLastPage = (page: TVHEvents) =>
+            page.entries.length === 0 || page.entries[page.entries.length - 1].start * 1000 > horizon;
 
         try {
-            const firstPage = await this.retrieveTVHEPGPage(start);
-            this.addTVHEvents(firstPage, channelsByUuid);
-            console.log('epg events received: %d of %d', start + firstPage.entries.length, firstPage.totalCount);
+            const firstPage = await this.retrieveTVHEPGPage(0);
+            addEvents(firstPage);
+            !isRefresh && callback(this.channels);
 
-            // notify calling component
-            callback(this.channels);
-
-            // collect start positions of the remaining pages
-            const totalCount = Math.min(firstPage.totalCount || 0, this.maxTotalEpgEntries);
-            const pageStarts: number[] = [];
-            if (firstPage.entries.length > 0) {
-                for (
-                    let pageStart = start + firstPage.entries.length;
-                    pageStart < totalCount;
-                    pageStart += TVHDataService.EPG_PAGE_SIZE
-                ) {
-                    pageStarts.push(pageStart);
-                }
-            }
+            const totalCount = Math.min(firstPage.totalCount || 0, TVHDataService.EPG_MAX_ENTRIES);
+            let isDone = isLastPage(firstPage);
+            let nextStart = firstPage.entries.length;
 
             // keep a limited number of requests in flight
             const pendingPages: Promise<TVHEvents | undefined>[] = [];
-            let nextPage = 0;
             const requestNextPage = () => {
-                if (nextPage < pageStarts.length) {
-                    const pageStart = pageStarts[nextPage++];
-                    pendingPages.push(
-                        this.retrieveTVHEPGPage(pageStart).catch((error) => {
-                            console.log('Failed to retrieve epg data at %d: ', pageStart, JSON.stringify(error));
-                            return undefined;
-                        })
-                    );
-                }
+                if (isDone || nextStart >= totalCount) return;
+                const pageStart = nextStart;
+                nextStart += TVHDataService.EPG_PAGE_SIZE;
+                pendingPages.push(
+                    this.retrieveTVHEPGPage(pageStart).catch((error) => {
+                        console.log('Failed to retrieve epg data at %d: ', pageStart, JSON.stringify(error));
+                        return undefined;
+                    })
+                );
             };
             for (let i = 0; i < TVHDataService.EPG_PARALLEL_REQUESTS; i++) {
                 requestNextPage();
@@ -576,17 +692,24 @@ export default class TVHDataService {
 
             while (pendingPages.length > 0) {
                 const page = await pendingPages.shift();
-                requestNextPage();
                 if (page && page.entries) {
-                    this.addTVHEvents(page, channelsByUuid);
+                    addEvents(page);
                     console.log('epg events received: %d of %d', page.entries.length, page.totalCount);
-                    // notify calling component
-                    callback(this.channels);
+                    !isRefresh && callback(this.channels);
+                    isDone = isDone || isLastPage(page);
                 }
+                requestNextPage();
             }
+
+            if (isRefresh) {
+                this.channels.forEach((channel) => channel.setEvents(refreshedEvents.get(channel.getUUID()) || []));
+            }
+            this.epgLoadedAt = Date.now();
         } catch (error) {
             console.log('Failed to retrieve epg data: ', JSON.stringify(error));
             return;
+        } finally {
+            this.isEpgLoading = false;
         }
 
         console.log('processed all epg events');

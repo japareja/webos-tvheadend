@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import EPGChannel from '../models/EPGChannel';
 import MediaUtils from '../utils/MediaUtils';
 import '../styles/app.css';
+import { t } from '../i18n/I18n';
 
 // if the pip stream is not playing after this time, we assume the tv can't play a second video
 const PIP_START_TIMEOUT_MILLIS = 10000;
@@ -85,8 +86,12 @@ const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (re
                 onPlaying={handlePlaying}
                 onError={() => fail('video error')}
             ></video>
-            {!isPlaying && <div className="pipStatus">Loading...</div>}
-            {isHintVisible && <div className="pipHint">&#9664; Swap &nbsp; &#9654; Close</div>}
+            {!isPlaying && <div className="pipStatus">{t('Loading...')}</div>}
+            {isHintVisible && (
+                <div className="pipHint">
+                    &#9664; {t('Swap')} &nbsp; &#9654; {t('Close')}
+                </div>
+            )}
             <div className="pipLabel">
                 {props.channel.getChannelID()} {props.channel.getName()}
             </div>
