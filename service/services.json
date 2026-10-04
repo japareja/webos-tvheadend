@@ -16,6 +16,10 @@
                 {
                     "name": "ping",
                     "public": true
+                },
+                {
+                    "name": "settingsBackup",
+                    "public": true
                 }
             ]
         }

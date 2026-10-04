@@ -13,4 +13,20 @@ export default class MockFileServiceAdapter implements FileServiceInterface {
     async readEpgCache<T>(): Promise<EpgSuccessResponse<T>> {
         return { returnValue: true, result: {} as T };
     }
+
+    // the backup lives in the session storage, so clearing the local storage simulates a reinstall
+    async writeSettingsBackup(data: { [key: string]: string }): Promise<SettingsBackupWriteResponse> {
+        sessionStorage.setItem('settingsBackup', JSON.stringify(data));
+        return { returnValue: true, dirs: ['/tmp/webos-tvheadend'] };
+    }
+
+    async readSettingsBackup(): Promise<SettingsBackupReadResponse> {
+        const backup = sessionStorage.getItem('settingsBackup');
+        return {
+            returnValue: true,
+            found: !!backup,
+            dir: '/tmp/webos-tvheadend',
+            result: backup ? JSON.parse(backup) : undefined
+        };
+    }
 }

@@ -10,6 +10,7 @@ import AppContext from '../AppContext';
 import TestResult from './TestResult';
 import StorageHelper, { PipSettings } from '../utils/StorageHelper';
 import { t } from '../i18n/I18n';
+import BodyText from '@enact/moonstone/BodyText';
 
 const TVHSettings = (props: { unmount: () => void }) => {
     const { tvhDataService, setTvhDataService } = useContext(AppContext);
@@ -24,6 +25,7 @@ const TVHSettings = (props: { unmount: () => void }) => {
         dvrUuid: 0
     });
     const [pipSettings, setPipSettings] = useState<PipSettings>(StorageHelper.getPipSettings());
+    const [backupInfo, setBackupInfo] = useState('');
     const tvhSettingsWrapper = useRef<HTMLDivElement>(null);
 
     const focus = () => tvhSettingsWrapper.current?.focus();
@@ -32,6 +34,8 @@ const TVHSettings = (props: { unmount: () => void }) => {
         // put to storage
         StorageHelper.setTvhSettings(serviceParms);
         StorageHelper.setPipSettings(pipSettings);
+        // keep a copy outside of the app right away, so it survives uninstalling the app
+        StorageHelper.writeBackupNow();
         setTvhDataService(new TVHDataService(serviceParms));
         props.unmount();
     };
@@ -85,10 +89,35 @@ const TVHSettings = (props: { unmount: () => void }) => {
         );
     };
 
+    /**
+     * where the backup of the settings is kept (it survives uninstalling the app)
+     */
+    const updateBackupInfo = () => {
+        if (!StorageHelper.getTvhSettings()) {
+            setBackupInfo(t('A copy of the settings is kept outside of the app as soon as they are saved.'));
+            return;
+        }
+        StorageHelper.writeBackupNow()
+            .then((response) => {
+                const dirs = ((response as SettingsBackupWriteResponse | undefined)?.dirs || []).filter(
+                    (dir) => dir.length > 0
+                );
+                if (dirs.length === 0) {
+                    setBackupInfo(t('This TV does not allow to keep a copy of the settings outside of the app.'));
+                } else if (dirs.every((dir) => dir.indexOf('/tmp') === 0)) {
+                    setBackupInfo(t('Copy of the settings in {0} (kept until the TV is restarted).', dirs.join(', ')));
+                } else {
+                    setBackupInfo(t('Copy of the settings in {0}.', dirs.join(', ')));
+                }
+            })
+            .catch(() => setBackupInfo(t('This TV does not allow to keep a copy of the settings outside of the app.')));
+    };
+
     useEffect(() => {
         // read state from storage if exists
         const settings = StorageHelper.getTvhSettings() || ({} as TVHDataServiceParms);
         setServiceParms(settings);
+        updateBackupInfo();
         focus();
     }, []);
 
@@ -144,9 +173,18 @@ const TVHSettings = (props: { unmount: () => void }) => {
                     </Button>
                 )}
                 {isLoading && <Spinner component={Panel} size="medium" />}
-                <Button disabled={!isValid} backgroundOpacity="lightTranslucent" onClick={handleSave}>
+                {/* saving is possible even if some checks fail, e.g. while tvheadend is not reachable */}
+                <Button
+                    disabled={!serviceParms.tvhUrl || serviceParms.tvhUrl.trim().length === 0}
+                    backgroundOpacity="lightTranslucent"
+                    onClick={handleSave}
+                >
                     {t('Save')}
                 </Button>
+                {testResults && !isValid && (
+                    <BodyText>{t('Some checks failed, the settings can be saved anyway.')}</BodyText>
+                )}
+                {backupInfo && <BodyText>{backupInfo}</BodyText>}
                 <br /> <br />
                 {testResults && (
                     <>

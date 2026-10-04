@@ -30,4 +30,33 @@ export default class FileServiceAdapter implements FileServiceInterface {
             });
         });
     }
+
+    writeSettingsBackup(data: { [key: string]: string }): Promise<SettingsBackupWriteResponse> {
+        return this.requestSettingsBackup<SettingsBackupWriteResponse>({ write: true, data: data });
+    }
+
+    readSettingsBackup(): Promise<SettingsBackupReadResponse> {
+        return this.requestSettingsBackup<SettingsBackupReadResponse>({ read: true });
+    }
+
+    private requestSettingsBackup<T extends WebOSTV.OnCompleteSuccessResponse>(
+        parameters: Record<string, unknown>
+    ): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            // the service might not answer at all (e.g. an older service version)
+            const timeout = setTimeout(() => reject({ errorText: 'settings backup did not answer' }), 10000);
+            global.webOS.service.request('luna://com.willinux.tvh.app.proxy', {
+                method: 'settingsBackup',
+                parameters: parameters,
+                onSuccess: (res: WebOSTV.OnCompleteSuccessResponse) => {
+                    clearTimeout(timeout);
+                    resolve(res as T);
+                },
+                onFailure: (res: ProxyErrorResponse) => {
+                    clearTimeout(timeout);
+                    reject(res);
+                }
+            });
+        });
+    }
 }

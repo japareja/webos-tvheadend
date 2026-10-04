@@ -76,6 +76,15 @@ const es: { [text: string]: string } = {
     'Picture in Picture': 'Imagen en imagen',
     'Streaming profile (Optional)': 'Perfil de streaming (opcional)',
     Connect: 'Conectar',
+    'Some checks failed, the settings can be saved anyway.':
+        'Alguna comprobación ha fallado, pero puedes guardar los ajustes igualmente.',
+    'A copy of the settings is kept outside of the app as soon as they are saved.':
+        'Al guardar los ajustes se hará una copia fuera de la app, para que no se pierdan al desinstalarla.',
+    'This TV does not allow to keep a copy of the settings outside of the app.':
+        'Esta TV no permite guardar una copia de los ajustes fuera de la app.',
+    'Copy of the settings in {0} (kept until the TV is restarted).':
+        'Copia de los ajustes en {0} (se conserva hasta que se reinicie la TV).',
+    'Copy of the settings in {0}.': 'Copia de los ajustes en {0}.',
     Save: 'Guardar',
     'Connection Test Results': 'Resultado de la prueba de conexión',
     'Device Info: ': 'Dispositivo: ',

@@ -64,6 +64,8 @@ ares-inspect -d tv com.willinux.tvh.app --open
 - User Authentication: basic and digest (md5, sha256)
 - Picture in picture (experimental, see below)
 - English and Spanish user interface (taken from the TV language)
+- The settings are also saved outside of the app, so they survive uninstalling and installing it again
+  (where the TV allows it, the setup shows the location)
 
 ## Remote control
 Live tv:

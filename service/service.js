@@ -1,5 +1,6 @@
 const fileHandler = require('./filehandler');
 const httpProxyHandler = require('./httpproxyhandler');
+const settingsBackup = require('./settingsbackup');
 const Service = require('webos-service');
 
 // create webos service
@@ -20,6 +21,11 @@ service.activityManager.create("keepAlive", function (activity) {
  * allow read/write access to files
  */
 service.register('fileIO', fileHandler.handleFileIO);
+
+/**
+ * backup of the settings outside of the app, so they survive a reinstall
+ */
+service.register('settingsBackup', settingsBackup.handleSettingsBackup);
 
 /**
  * backend proxy for requests to tvheadend as they are

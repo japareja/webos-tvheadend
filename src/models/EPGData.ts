@@ -135,6 +135,15 @@ export default class EPGData {
         ].concat(this.tags);
     }
 
+    /**
+     * read favorites and the selected group again, e.g. after the settings were restored from a backup
+     */
+    reloadPreferences() {
+        this.favorites = new Set<string>(StorageHelper.getFavorites());
+        this.currentGroupId = StorageHelper.getChannelGroup() || GROUP_ALL;
+        this.view = undefined;
+    }
+
     updateTags(tags: ChannelGroup[]) {
         this.tags = tags;
         this.view = undefined;

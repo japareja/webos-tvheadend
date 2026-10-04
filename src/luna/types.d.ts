@@ -69,9 +69,22 @@ interface LunaServiceInterface {
     getNetworkInfo(): Promise<ConnectionMgrResponse>;
 }
 
+interface SettingsBackupWriteResponse extends WebOSTV.OnCompleteSuccessResponse {
+    // directories the backup could be written to
+    dirs: string[];
+}
+
+interface SettingsBackupReadResponse extends WebOSTV.OnCompleteSuccessResponse {
+    found: boolean;
+    dir?: string;
+    result?: { [key: string]: string };
+}
+
 interface FileServiceInterface {
     writeEpgCache(data: unknown): Promise<WebOSTV.OnCompleteSuccessResponse>;
     readEpgCache<T>(): Promise<EpgSuccessResponse<T>>;
+    writeSettingsBackup(data: { [key: string]: string }): Promise<SettingsBackupWriteResponse>;
+    readSettingsBackup(): Promise<SettingsBackupReadResponse>;
 }
 
 interface HttpProxyInterface {

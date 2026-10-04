@@ -9,6 +9,7 @@ import EPGChannel from './models/EPGChannel';
 import StorageHelper from './utils/StorageHelper';
 import Menu, { MenuItem } from './components/Menu';
 import Search from './components/Search';
+import Config from './config/Config';
 import { setLocale as setI18nLocale, t } from './i18n/I18n';
 
 // how often we check if the epg needs to be refreshed
@@ -36,11 +37,12 @@ const App = () => {
         epgData,
         imageCache,
         setPersistentAuthToken,
-        setAnimationsEnabled
+        setAnimationsEnabled,
+        setCurrentChannelPosition
     } = useContext(AppContext);
 
     const [isChannelsRetrieved, setIsChannelsRetrieved] = useState(false);
-    const [debugInfo, setDebugInfo] = useState("");
+    const [debugInfo, setDebugInfo] = useState('');
     const isWebKit = typeof document['hidden'] === 'undefined';
 
     const menu: MenuItem[] = [
@@ -100,46 +102,46 @@ const App = () => {
             setAppViewState(AppViewState.SETTINGS);
             return;
         }
-        
+
         // load locale
-        setDebugInfo("Loading Locale...");
+        setDebugInfo('Loading Locale...');
         await loadLocale(tvhDataService);
-        
+
         // load animations enabled
-        setDebugInfo("Check animations enabled...");
+        setDebugInfo('Check animations enabled...');
         await loadAnimationsEnabled(tvhDataService);
-        setDebugInfo("Set retrieved channels to false...");
+        setDebugInfo('Set retrieved channels to false...');
         // retrieve channel infos etc
         setIsChannelsRetrieved(false);
 
         try {
             setDebugInfo(t('Loading channels...'));
             const channels = await tvhDataService.retrieveM3UChannels();
-            setDebugInfo("Updating channels ("+channels.length+")...");
+            setDebugInfo('Updating channels (' + channels.length + ')...');
             epgData.updateChannels(channels);
-            setDebugInfo("Channels retrieved true...");
+            setDebugInfo('Channels retrieved true...');
             setIsChannelsRetrieved(true);
 
             // safe persistent token if available
             if (channels.length > 0) {
-                setDebugInfo("Safe persistent auth token...");
+                setDebugInfo('Safe persistent auth token...');
                 safePersistentAuthToken(channels[0].getStreamUrl());
             }
-            setDebugInfo("Preload images...");
+            setDebugInfo('Preload images...');
             // preload images
             preloadImages(channels);
 
             // retrieve channel tags for the channel groups
             tvhDataService.retrieveChannelTags().then((tags) => epgData.updateTags(tags));
 
-            setDebugInfo("Retrieve EPG...");
+            setDebugInfo('Retrieve EPG...');
             // retrieve epg and update channels
             tvhDataService.retrieveTVHEPG((channels) => {
                 // note: channels are already updated as we are working on references here
                 epgData.updateChannels(channels);
             });
 
-            setDebugInfo("Retrieve recordings...");
+            setDebugInfo('Retrieve recordings...');
             // retrieve recordings and update channels
             tvhDataService.retrieveUpcomingRecordings((recordings) => {
                 epgData.updateRecordings(recordings);
@@ -150,7 +152,7 @@ const App = () => {
             return;
         }
 
-        setDebugInfo("");
+        setDebugInfo('');
         setAppViewState(AppViewState.TV);
     };
 
@@ -244,14 +246,40 @@ const App = () => {
         // webOSRelaunch event
         document.addEventListener('webOSRelaunch', handleWebOSRelaunch);
 
-        const tvhSettings = StorageHelper.getTvhSettings();
-        if(tvhSettings !== undefined) {
+        // every change of the settings is also saved outside of the app, so it survives a reinstall
+        StorageHelper.setBackupWriter((settings) => Config.fileServiceAdapter.writeSettingsBackup(settings));
+        initSettings();
+    }, []);
+
+    /**
+     * start with the stored settings, or the backup of a previous installation if there are none
+     */
+    const initSettings = async () => {
+        let tvhSettings = StorageHelper.getTvhSettings();
+        if (tvhSettings === undefined) {
+            try {
+                const backup = await Config.fileServiceAdapter.readSettingsBackup();
+                if (backup.found && backup.result) {
+                    console.log('restoring settings from backup in %s', backup.dir);
+                    StorageHelper.restoreAllSettings(backup.result);
+                    epgData.reloadPreferences();
+                    setCurrentChannelPosition(StorageHelper.getLastChannelIndex());
+                    tvhSettings = StorageHelper.getTvhSettings();
+                }
+            } catch (error) {
+                console.log('No settings backup available: ', JSON.stringify(error));
+            }
+        } else {
+            // make sure there is a backup of the current settings
+            StorageHelper.scheduleBackup();
+        }
+
+        if (tvhSettings !== undefined) {
             setTvhDataService(new TVHDataService(tvhSettings));
         } else {
             setAppViewState(AppViewState.SETTINGS);
         }
-        
-    }, []);
+    };
 
     const handleBlur = (event: FocusEvent) => {
         event.stopPropagation();
