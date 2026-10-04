@@ -5,9 +5,8 @@ const crypto = require('crypto');
 
 exports.proxy = proxy;
 
-// reuse connections to tvheadend instead of opening a new one for every api call
-var httpAgent = new http.Agent({ keepAlive: true, maxSockets: 8 });
-var httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 8 });
+// Note: connections are deliberately not kept alive. With keep-alive some tvheadend versions
+// answered requests in a way the http parser of the tv (node 8) rejected with "Parse Error".
 
 // last authentication challenge per server and user, used to authenticate preemptively
 // so we don't need an extra 401 round trip for every request
@@ -38,7 +37,8 @@ function proxy(message) {
         port: parsedURL.port,
         path: parsedURL.path,
         method: message.payload.method || 'GET',
-        agent: parsedURL.protocol === 'https:' ? httpsAgent : httpAgent,
+        // one connection per request (newer node versions keep connections alive by default)
+        agent: false,
         headers: {}
     };
 
@@ -159,16 +159,19 @@ function request(options, user, password, message, state) {
             }
         })
         .on('error', function (err) {
-            // a kept alive connection might have been closed by the server in the meantime -> retry once
-            if (!timedOut && !state.connectionRetried && (err.code === 'ECONNRESET' || err.code === 'EPIPE')) {
+            // connection dropped or an answer that couldn't be parsed (HPE_* codes) -> retry once
+            var isRetryable =
+                err.code === 'ECONNRESET' || err.code === 'EPIPE' || (err.code && err.code.indexOf('HPE_') === 0);
+            if (!timedOut && !state.connectionRetried && isRetryable) {
                 state.connectionRetried = true;
                 request(options, user, password, message, state);
                 return;
             }
-            console.log('error:', err.message);
+            console.log('error:', err.message, err.code);
             respond(message, state, {
                 returnValue: false,
-                errorText: timedOut ? 'Request timed out' : err.message,
+                // the code (e.g. HPE_INVALID_HEADER_TOKEN) tells what exactly went wrong
+                errorText: timedOut ? 'Request timed out' : err.message + (err.code ? ' (' + err.code + ')' : ''),
                 errorCode: 1
             });
         });

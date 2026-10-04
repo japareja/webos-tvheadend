@@ -17,10 +17,13 @@ export default class M3UParser {
             items: []
         } as ParserResult;
 
-        const manifest = m3uContent.split(/(?=#EXTINF)/).map((l) => l.trim());
+        // ignore a byte order mark and leading whitespace
+        const content = (m3uContent || '').replace(/^\uFEFF/, '').trim();
+        const manifest = content.split(/(?=#EXTINF)/).map((l) => l.trim());
         const firstLine = manifest.shift();
         if (!firstLine || !/#EXTM3U/.test(firstLine)) {
-            throw new Error('Playlist is not valid');
+            // show what we got instead, e.g. an error page
+            throw new Error('Playlist is not valid: "' + content.substring(0, 80) + '"');
         }
         result.epgUrl = this.getAttribute(firstLine, 'x-tvg-url');
         for (const entry of manifest) {

@@ -530,12 +530,18 @@ export default class TVHDataService {
                         nextFreeNumber = Math.floor(nextFreeNumber) + 1;
                         channelNumber = nextFreeNumber;
                     }
+                    const streamUrl = TVHDataService.toUrl(item.streamUrl);
+                    if (!streamUrl) {
+                        // a single broken entry must not break the whole channel list
+                        console.log('skipping channel %s with invalid stream url %s', item.channelName, item.streamUrl);
+                        return;
+                    }
                     const channel = new EPGChannel(
-                        item.logoUrl && item.logoUrl.length > 0 ? new URL(item.logoUrl) : undefined,
+                        TVHDataService.toUrl(item.logoUrl),
                         item.channelName,
                         channelNumber,
                         item.channelId,
-                        new URL(item.streamUrl)
+                        streamUrl
                     );
                     this.channels.push(channel);
                 });
@@ -545,6 +551,18 @@ export default class TVHDataService {
         } catch (error) {
             console.log('Failed to retrieve channel data: ', JSON.stringify(error));
             throw error;
+        }
+    }
+
+    /** parse an url, undefined if it is empty or not valid */
+    private static toUrl(url?: string): URL | undefined {
+        if (!url) {
+            return undefined;
+        }
+        try {
+            return new URL(url.trim());
+        } catch {
+            return undefined;
         }
     }
 

@@ -21,7 +21,8 @@ jest.mock('../config/Config', () => ({
                         '#EXTM3U\n' +
                             '#EXTINF:-1 tvg-id="a" tvg-chno="7",Seven\nhttp://tvh/stream/channelid/1?profile=pass\n' +
                             '#EXTINF:-1 tvg-id="b",No number\nhttp://tvh/stream/channelid/2?profile=pass\n' +
-                            '#EXTINF:-1 tvg-id="c" tvg-chno="1001",Iptv\nhttp://tvh/stream/channelid/3?profile=pass\n'
+                            '#EXTINF:-1 tvg-id="c" tvg-chno="1001" logo="picons/broken.png",Iptv\nhttp://tvh/stream/channelid/3?profile=pass\n' +
+                            '#EXTINF:-1 tvg-id="d" tvg-chno="9",Broken\nnot a url\n'
                     );
                 }
                 if (url.indexOf('api/epg/events/grid') >= 0) {
@@ -56,7 +57,9 @@ describe('TVHDataService', () => {
     it('uses the tvheadend channel numbers and numbers the rest after the highest one', async () => {
         const service = createService();
         const channels = await service.retrieveM3UChannels();
+        // the entry with an invalid stream url is skipped, an invalid logo is ignored
         expect(channels.map((channel) => channel.getChannelID())).toEqual([7, 1002, 1001]);
+        expect(channels[2].getImageURL()).toBeUndefined();
 
         // reloading doesn't duplicate the channels
         expect((await service.retrieveM3UChannels()).length).toBe(3);
