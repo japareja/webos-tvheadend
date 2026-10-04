@@ -9,13 +9,16 @@ import AppContext, { AppVisibilityState } from '../AppContext';
 import '../styles/app.css';
 import StorageHelper from '../utils/StorageHelper';
 import EPGEvent from '../models/EPGEvent';
+import EPGChannel from '../models/EPGChannel';
 import Spinner from '@enact/moonstone/Spinner';
 import { Panel } from '@enact/moonstone/Panels';
 import { AppViewState } from '../App';
 import MediaUtils from '../utils/MediaUtils';
+import PipWindow from './PipWindow';
 
 // if channels are switched faster than this, only the last selected channel gets started
 const ZAP_DEBOUNCE_MILLIS = 400;
+const PIP_MESSAGE_DURATION_MILLIS = 6000;
 
 export enum State {
     TV = 'tv',
@@ -41,12 +44,17 @@ const TV = () => {
     const timeoutChangeChannel = useRef<NodeJS.Timeout | null>(null);
     const timeoutStartStream = useRef<NodeJS.Timeout | null>(null);
     const lastSourceChange = useRef(0);
+    const restartAfterPipFailure = useRef(false);
+    const timeoutPipMessage = useRef<NodeJS.Timeout | null>(null);
+    const [pipSettings] = useState(StorageHelper.getPipSettings());
     const audioTracksRef = useRef<AudioTrackList>();
     const textTracksRef = useRef<TextTrackList>();
 
     const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const [state, setState] = useState<State>(State.CHANNEL_INFO);
     const [channelNumberText, setChannelNumberText] = useState('');
+    const [pipChannelPosition, setPipChannelPosition] = useState<number | null>(null);
+    const [pipMessage, setPipMessage] = useState('');
 
     const focus = () => tvWrapper.current?.focus();
 
@@ -124,6 +132,15 @@ const TV = () => {
                 event.stopPropagation();
                 setState(State.TV);
                 break;
+            case 39: // right arrow -> open/close picture in picture
+            case 80: // keyboard 'p'
+                event.stopPropagation();
+                togglePip();
+                break;
+            case 37: // left arrow -> swap main and picture in picture channel
+                event.stopPropagation();
+                swapPip();
+                break;
             default:
                 console.log('TV-keyPressed:', keyCode);
         }
@@ -154,6 +171,52 @@ const TV = () => {
     };
 
     const getMediaElement = () => video.current;
+
+    const showPipMessage = (message: string) => {
+        setPipMessage(message);
+        timeoutPipMessage.current && clearTimeout(timeoutPipMessage.current);
+        timeoutPipMessage.current = setTimeout(() => setPipMessage(''), PIP_MESSAGE_DURATION_MILLIS);
+    };
+
+    /**
+     * open the picture in picture window with the current channel, or close it if it is open
+     */
+    const togglePip = () => {
+        setPipChannelPosition(pipChannelPosition === null ? currentChannelPosition : null);
+    };
+
+    /**
+     * the picture in picture channel goes to the main window and vice versa
+     */
+    const swapPip = () => {
+        if (pipChannelPosition === null || pipChannelPosition === currentChannelPosition) {
+            return;
+        }
+        setPipChannelPosition(currentChannelPosition);
+        changeChannelPosition(pipChannelPosition);
+    };
+
+    /**
+     * the tv could not play the second video, close it and make sure the main video keeps running
+     */
+    const handlePipFailed = (reason: string) => {
+        console.log('picture in picture failed:', reason);
+        restartAfterPipFailure.current = true;
+        setPipChannelPosition(null);
+        showPipMessage('Picture in picture could not be started. Your TV might not support two videos at once.');
+    };
+
+    /**
+     * the main video should never pause on its own. If it does while picture in picture is open,
+     * the second video took over the decoder of the main video
+     */
+    const handleMainVideoPause = () => {
+        const videoElement = getMediaElement();
+        // pauses without a source attached come from our own player resets
+        if (pipChannelPosition !== null && videoElement?.firstChild && !videoElement.ended) {
+            handlePipFailed('main video interrupted');
+        }
+    };
 
     const toggleRecording = (epgEvent: EPGEvent, callback?: () => unknown) => {
         // add current viewing channel to records
@@ -311,9 +374,22 @@ const TV = () => {
     };
 
     useEffect(() => {
+        // the pip video is released now, restart the main video if it was interrupted
+        if (pipChannelPosition === null && restartAfterPipFailure.current) {
+            restartAfterPipFailure.current = false;
+            const videoElement = getMediaElement();
+            const currentChannel = getCurrentChannel();
+            if (videoElement && currentChannel && (videoElement.paused || videoElement.readyState < 2)) {
+                changeSource(currentChannel.getStreamUrl());
+            }
+        }
+    }, [pipChannelPosition]);
+
+    useEffect(() => {
         focus();
 
         return () => {
+            timeoutPipMessage.current && clearTimeout(timeoutPipMessage.current);
             const videoElement = getMediaElement();
             if (!videoElement) return;
             resetPlayer(videoElement);
@@ -365,6 +441,7 @@ const TV = () => {
         // state changed to background -> stop playback
         if (appVisibilityState === AppVisibilityState.BACKGROUND) {
             console.log('TV: changed to background');
+            setPipChannelPosition(null);
             const videoElement = getMediaElement();
             if (!videoElement) return;
             resetPlayer(videoElement);
@@ -398,6 +475,16 @@ const TV = () => {
             )}
 
             {!isVideoPlaying && <Spinner centered component={Panel}></Spinner>}
+
+            {pipChannelPosition !== null && epgData.getChannel(pipChannelPosition) && (
+                <PipWindow
+                    channel={epgData.getChannel(pipChannelPosition) as EPGChannel}
+                    profile={pipSettings.profile || undefined}
+                    onFailed={handlePipFailed}
+                />
+            )}
+
+            {pipMessage !== '' && <div className="pipMessage">{pipMessage}</div>}
 
             {state === State.CHANNEL_SETTINGS && (
                 <ChannelSettings
@@ -439,6 +526,7 @@ const TV = () => {
                 preload="none"
                 onLoadedMetadata={handleLoadedMetaData}
                 onPlaying={() => setIsVideoPlaying(true)}
+                onPause={handleMainVideoPause}
             ></video>
         </div>
     );

@@ -6,6 +6,18 @@ export default class MediaUtils {
     // UHD hint for the webOS media pipeline, so a 4k capable decoder is allocated
     static MAX_WIDTH = 3840;
     static MAX_HEIGHT = 2160;
+    // the picture in picture window only asks for a full hd decoder
+    static PIP_MAX_WIDTH = 1920;
+    static PIP_MAX_HEIGHT = 1080;
+
+    /**
+     * Returns a copy of the stream url that requests the given tvheadend streaming profile
+     */
+    static withProfile(url: URL, profile: string): URL {
+        const profileUrl = new URL(url.toString());
+        profileUrl.searchParams.set('profile', profile);
+        return profileUrl;
+    }
 
     /**
      * Guess the container mime type from the tvheadend streaming profile in the url.
@@ -36,7 +48,7 @@ export default class MediaUtils {
      * It tells the pipeline up front that this is a plain URI video stream and that it
      * might be UHD, instead of letting it find that out by probing.
      */
-    static getMediaOption() {
+    static getMediaOption(maxWidth = MediaUtils.MAX_WIDTH, maxHeight = MediaUtils.MAX_HEIGHT) {
         const options = {
             mediaTransportType: 'URI',
             option: {
@@ -44,8 +56,8 @@ export default class MediaUtils {
                     type: 'video'
                 },
                 adaptiveStreaming: {
-                    maxWidth: MediaUtils.MAX_WIDTH,
-                    maxHeight: MediaUtils.MAX_HEIGHT
+                    maxWidth: maxWidth,
+                    maxHeight: maxHeight
                 }
             }
         };
@@ -72,19 +84,31 @@ export default class MediaUtils {
      * If the container type is known a typed source with mediaOption is added first. An untyped
      * source with the same url is always added as fallback, so playback still works in case the
      * typed source is rejected by the pipeline.
+     *
+     * Returns the last source element, which fires an error event if no source could be played.
      */
-    static attachSource(videoElement: HTMLVideoElement, url: URL) {
+    static attachSource(
+        videoElement: HTMLVideoElement,
+        url: URL,
+        maxWidth = MediaUtils.MAX_WIDTH,
+        maxHeight = MediaUtils.MAX_HEIGHT
+    ) {
         const mimeType = MediaUtils.getMimeType(url);
 
         if (mimeType) {
             const typedSource = document.createElement('source');
             typedSource.setAttribute('src', url.toString());
-            typedSource.setAttribute('type', mimeType + ';mediaOption=' + MediaUtils.getMediaOption());
+            typedSource.setAttribute(
+                'type',
+                mimeType + ';mediaOption=' + MediaUtils.getMediaOption(maxWidth, maxHeight)
+            );
             videoElement.appendChild(typedSource);
         }
 
         const fallbackSource = document.createElement('source');
         fallbackSource.setAttribute('src', url.toString());
         videoElement.appendChild(fallbackSource);
+
+        return fallbackSource;
     }
 }
