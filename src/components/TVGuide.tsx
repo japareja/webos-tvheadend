@@ -479,6 +479,7 @@ const TVGuide = (props: {
 
         const firstPos = getFirstVisibleChannelPosition();
         const lastPos = getLastVisibleChannelPosition();
+        const focusedEvent = epgData.getEvent(focusedChannelPosition.current, focusedEventPosition.current);
 
         //console.log("Channel: First: " + firstPos + " Last: " + lastPos);
         //let transparentTop = firstPos + 3;
@@ -501,18 +502,16 @@ const TVGuide = (props: {
             canvas.stroke();
 
             const epgEvents = epgData.getEvents(pos);
-            let wasVisible = false;
-            //  the list is ordered by time so its only a few events processed
-            epgEvents.forEach((event) => {
-                const isVisible = isEventVisible(event.getStart(), event.getEnd());
-                if (isVisible) {
-                    wasVisible = true;
-                    drawEvent(canvas, pos, event, drawingRect);
+            //  the list is ordered by time so we can stop as soon as an event starts after the visible area
+            for (let i = 0; i < epgEvents.length; i++) {
+                const event = epgEvents[i];
+                if (event.getStart() > timeUpperBoundary.current) {
+                    break;
                 }
-                if (wasVisible && !isVisible) {
-                    return;
+                if (isEventVisible(event.getStart(), event.getEnd())) {
+                    drawEvent(canvas, pos, event, drawingRect, focusedEvent);
                 }
-            });
+            }
         }
         canvas.globalAlpha = 1;
     };
@@ -521,10 +520,9 @@ const TVGuide = (props: {
         canvas: CanvasRenderingContext2D,
         channelPosition: number,
         event: EPGEvent,
-        drawingRect: Rect
+        drawingRect: Rect,
+        focusedEvent: EPGEvent | undefined
     ) => {
-        const focusedEvent = epgData.getEvent(focusedChannelPosition.current, focusedEventPosition.current);
-
         // set starting minimal behind channel list
         setEventDrawingRectangle(channelPosition, event.getStart(), event.getEnd(), drawingRect);
         if (drawingRect.left < getScrollX() + mChannelLayoutWidth + mChannelLayoutMargin) {

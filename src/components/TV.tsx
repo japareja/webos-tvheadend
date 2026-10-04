@@ -12,6 +12,10 @@ import EPGEvent from '../models/EPGEvent';
 import Spinner from '@enact/moonstone/Spinner';
 import { Panel } from '@enact/moonstone/Panels';
 import { AppViewState } from '../App';
+import MediaUtils from '../utils/MediaUtils';
+
+// if channels are switched faster than this, only the last selected channel gets started
+const ZAP_DEBOUNCE_MILLIS = 400;
 
 export enum State {
     TV = 'tv',
@@ -35,6 +39,8 @@ const TV = () => {
     const tvWrapper = useRef<HTMLDivElement>(null);
     const video = useRef<HTMLVideoElement>(null);
     const timeoutChangeChannel = useRef<NodeJS.Timeout | null>(null);
+    const timeoutStartStream = useRef<NodeJS.Timeout | null>(null);
+    const lastSourceChange = useRef(0);
     const audioTracksRef = useRef<AudioTrackList>();
     const textTracksRef = useRef<TextTrackList>();
 
@@ -241,52 +247,47 @@ const TV = () => {
         textTracksRef.current = textTracks;
     };
 
+    const cancelPendingStreamStart = () => {
+        timeoutStartStream.current && clearTimeout(timeoutStartStream.current);
+        timeoutStartStream.current = null;
+    };
+
     const resetPlayer = (videoElement: HTMLVideoElement) => {
+        cancelPendingStreamStart();
         setAudioTracks(undefined);
         setTextTracks(undefined);
+        MediaUtils.resetVideoElement(videoElement);
+    };
 
-        // Remove all source elements
-        while (videoElement.firstChild) {
-            videoElement.removeChild(videoElement.firstChild);
+    const startSource = (videoElement: HTMLVideoElement, dataUrl: URL) => {
+        timeoutStartStream.current = null;
+        MediaUtils.attachSource(videoElement, dataUrl);
+
+        // Auto-play video with some (unused) error handling
+        const playPromise = videoElement.play();
+        // workarund for promise not beeing returned in webos 3.x
+        if (playPromise !== undefined) {
+            playPromise.catch((error) => console.log('channel switched before it could be played', error));
         }
-
-        // Reset video
-        videoElement.load();
     };
 
     const changeSource = (dataUrl: URL) => {
         const videoElement = getMediaElement();
         if (!videoElement) return;
 
+        // stop the current stream right away, so tvheadend can release the tuner
         resetPlayer(videoElement);
         setIsVideoPlaying(false);
 
-        //const options = {
-        //    mediaTransportType: 'URI'
-        //};
-
-        // Convert the created object to JSON string and encode it.
-        //const mediaOption = encodeURI(JSON.stringify(options));
-
-        // Add new source element
-        const source = document.createElement('source');
-
-        // Add attributes to the created source element for media content.
-        source.setAttribute('src', dataUrl.toString());
-        //source.setAttribute('type', 'video/mp2t;mediaOption=' + mediaOption);
-        //source.setAttribute('src', 'https://www.w3schools.com/html/mov_bbb.mp4');
-        //source.setAttribute('type', 'video/mp4');
-        videoElement.appendChild(source);
-
-        // Auto-play video with some (unused) error handling
-        const playPromise = videoElement.play();
-        // workarund for promise not beeing returned in webos 3.x
-        if (playPromise !== undefined) {
-            playPromise
-                .then(() => setIsVideoPlaying(true))
-                .catch((error) => console.log('channel switched before it could be played', error));
+        // start a single channel change immediately, but debounce fast zapping so we
+        // don't open (and directly close again) a stream for every channel we pass
+        const now = Date.now();
+        const isZapping = now - lastSourceChange.current < ZAP_DEBOUNCE_MILLIS;
+        lastSourceChange.current = now;
+        if (isZapping) {
+            timeoutStartStream.current = setTimeout(() => startSource(videoElement, dataUrl), ZAP_DEBOUNCE_MILLIS);
         } else {
-            setIsVideoPlaying(true);
+            startSource(videoElement, dataUrl);
         }
     };
 
@@ -437,6 +438,7 @@ const TV = () => {
                 height={getHeight()}
                 preload="none"
                 onLoadedMetadata={handleLoadedMetaData}
+                onPlaying={() => setIsVideoPlaying(true)}
             ></video>
         </div>
     );

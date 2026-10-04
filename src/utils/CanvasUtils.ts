@@ -1,4 +1,4 @@
-import Rect from "../models/Rect";
+import Rect from '../models/Rect';
 
 export interface WriteTextOptions {
     fontSize?: number;
@@ -12,12 +12,29 @@ export interface WriteTextOptions {
 
 export default class CanvasUtils {
     static MEASURE_STRING = 'One interesting Measure String';
+    // measureText is expensive on tv hardware, so the approximation is cached per font
+    private static widthPerCharacterCache = CanvasUtils.createWidthPerCharacterCache();
+
+    private static createWidthPerCharacterCache() {
+        const cache = new Map<string, number>();
+        // measurements taken with a fallback font are invalid as soon as the web fonts are loaded
+        const fonts = (document as Document & { fonts?: EventTarget }).fonts;
+        fonts?.addEventListener && fonts.addEventListener('loadingdone', () => cache.clear());
+        return cache;
+    }
 
     /**
      * Return character width approximation of current font
      */
     static getWidthPerCharacter(canvas: CanvasRenderingContext2D) {
-        return canvas.measureText(CanvasUtils.MEASURE_STRING).width / CanvasUtils.MEASURE_STRING.length;
+        const font = canvas.font;
+        let widthPerCharacter = this.widthPerCharacterCache.get(font);
+        if (widthPerCharacter === undefined) {
+            widthPerCharacter =
+                canvas.measureText(CanvasUtils.MEASURE_STRING).width / CanvasUtils.MEASURE_STRING.length;
+            this.widthPerCharacterCache.set(font, widthPerCharacter);
+        }
+        return widthPerCharacter;
     }
 
     /**

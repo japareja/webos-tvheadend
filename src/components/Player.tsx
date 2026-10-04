@@ -7,6 +7,7 @@ import { AppViewState } from '../App';
 import RecordingList from './RecordingList';
 import EPGEvent from '../models/EPGEvent';
 import EPGChannelRecording from '../models/EPGChannelRecording';
+import MediaUtils from '../utils/MediaUtils';
 
 export enum State {
     PLAYER = 'player',
@@ -195,14 +196,7 @@ const Player = () => {
     const resetPlayer = (videoElement: HTMLVideoElement) => {
         setAudioTracks(undefined);
         setTextTracks(undefined);
-
-        // Remove all source elements
-        while (videoElement.firstChild) {
-            videoElement.removeChild(videoElement.firstChild);
-        }
-
-        // Reset video
-        videoElement.load();
+        MediaUtils.resetVideoElement(videoElement);
     };
 
     const changeSource = (dataUrl: URL) => {
@@ -210,24 +204,7 @@ const Player = () => {
         if (!videoElement) return;
 
         resetPlayer(videoElement);
-        //setIsVideoPlaying(false);
-
-        //const options = {
-        //    mediaTransportType: 'URI'
-        //};
-
-        // Convert the created object to JSON string and encode it.
-        //const mediaOption = encodeURI(JSON.stringify(options));
-
-        // Add new source element
-        const source = document.createElement('source');
-
-        // Add attributes to the created source element for media content.
-        source.setAttribute('src', dataUrl.toString());
-        //source.setAttribute('type', 'video/mp2t;mediaOption=' + mediaOption);
-        //source.setAttribute('src', 'https://www.w3schools.com/html/mov_bbb.mp4');
-        //source.setAttribute('type', 'video/mp4');
-        videoElement.appendChild(source);
+        MediaUtils.attachSource(videoElement, dataUrl);
 
         // Auto-play video with some (unused) error handling
         const playPromise = videoElement.play();

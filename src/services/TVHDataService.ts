@@ -81,7 +81,9 @@ interface EPGCallback<T extends EPGChannel | EPGChannelRecording = EPGChannel> {
 export default class TVHDataService {
     static API_SERVER_INFO = 'api/serverinfo';
     static API_EPG_TEST = 'api/epg/events/grid?dir=ASC&sort=start&limit=1&start=0';
-    static API_EPG = 'api/epg/events/grid?dir=ASC&sort=start&limit=500&start=';
+    static EPG_PAGE_SIZE = 500;
+    static EPG_PARALLEL_REQUESTS = 4;
+    static API_EPG = 'api/epg/events/grid?dir=ASC&sort=start&limit=' + TVHDataService.EPG_PAGE_SIZE + '&start=';
     static API_DVR_CONFIG = 'api/dvr/config/grid';
     static API_DVR_CREATE_BY_EVENT = 'api/dvr/entry/create_by_event?';
     static API_DVR_CANCEL = 'api/dvr/entry/cancel?uuid=';
@@ -332,9 +334,11 @@ export default class TVHDataService {
     }
 
     async retrieveRecordings(authToken?: string): Promise<EPGChannelRecording[]> {
-        const finishedTVHRecordings = await this.retrieveTVHRecordings('REC_FINISHED');
-        const failedTVHRecordings = await this.retrieveTVHRecordings('REC_FAILED');
-        const upcomingTVHRecordings = await this.retrieveTVHRecordings('REC_UPCOMING');
+        const [finishedTVHRecordings, failedTVHRecordings, upcomingTVHRecordings] = await Promise.all([
+            this.retrieveTVHRecordings('REC_FINISHED'),
+            this.retrieveTVHRecordings('REC_FAILED'),
+            this.retrieveTVHRecordings('REC_UPCOMING')
+        ]);
 
         const recordings: EPGChannelRecording[] = [];
         const tvhRecordings = [
@@ -508,45 +512,89 @@ export default class TVHDataService {
         });
     }
 
-    retrieveTVHEPG(start: number, callback: EPGCallback) {
-        let totalCount = 0;
+    private retrieveTVHEPGPage(start: number) {
+        return this.httpProxyServiceAdapter.call<TVHEvents>({
+            url: this.url + TVHDataService.API_EPG + start,
+            user: this.user,
+            password: this.password
+        });
+    }
 
-        return this.httpProxyServiceAdapter
-            .call<TVHEvents>({
-                url: this.url + TVHDataService.API_EPG + start,
-                user: this.user,
-                password: this.password
-            })
-            .then((response) => {
-                console.log('epg events received: %d of %d', start + response.entries.length, response.totalCount);
-                if (response.entries.length > 0) {
-                    totalCount = response.totalCount;
-                    response.entries.forEach((tvhEvent) => {
-                        start++;
-                        this.channels
-                            .find((channel) => channel.getUUID() == tvhEvent.channelUuid)
-                            ?.addEvent(this.toEpgEvent(tvhEvent));
-                    });
+    private addTVHEvents(response: TVHEvents, channelsByUuid: Map<string, EPGChannel>) {
+        response.entries.forEach((tvhEvent) => {
+            channelsByUuid.get(tvhEvent.channelUuid)?.addEvent(this.toEpgEvent(tvhEvent));
+        });
+    }
+
+    /**
+     * Retrieve the epg in pages. The first page tells us how many events there are, the remaining
+     * pages are then requested with a few requests in parallel, but processed in order, so the
+     * events of each channel stay sorted by start time.
+     */
+    async retrieveTVHEPG(start: number, callback: EPGCallback) {
+        const channelsByUuid = new Map<string, EPGChannel>();
+        this.channels.forEach((channel) => channelsByUuid.set(channel.getUUID(), channel));
+
+        try {
+            const firstPage = await this.retrieveTVHEPGPage(start);
+            this.addTVHEvents(firstPage, channelsByUuid);
+            console.log('epg events received: %d of %d', start + firstPage.entries.length, firstPage.totalCount);
+
+            // notify calling component
+            callback(this.channels);
+
+            // collect start positions of the remaining pages
+            const totalCount = Math.min(firstPage.totalCount || 0, this.maxTotalEpgEntries);
+            const pageStarts: number[] = [];
+            if (firstPage.entries.length > 0) {
+                for (
+                    let pageStart = start + firstPage.entries.length;
+                    pageStart < totalCount;
+                    pageStart += TVHDataService.EPG_PAGE_SIZE
+                ) {
+                    pageStarts.push(pageStart);
                 }
+            }
 
-                // notify calling component
-                callback(this.channels);
-
-                // retrieve next increment
-                if (start < this.maxTotalEpgEntries && totalCount > start) {
-                    this.retrieveTVHEPG(start, callback);
-                    return;
+            // keep a limited number of requests in flight
+            const pendingPages: Promise<TVHEvents | undefined>[] = [];
+            let nextPage = 0;
+            const requestNextPage = () => {
+                if (nextPage < pageStarts.length) {
+                    const pageStart = pageStarts[nextPage++];
+                    pendingPages.push(
+                        this.retrieveTVHEPGPage(pageStart).catch((error) => {
+                            console.log('Failed to retrieve epg data at %d: ', pageStart, JSON.stringify(error));
+                            return undefined;
+                        })
+                    );
                 }
-                console.log('processed all epg events');
+            };
+            for (let i = 0; i < TVHDataService.EPG_PARALLEL_REQUESTS; i++) {
+                requestNextPage();
+            }
 
-                try {
-                    this.epgCacheService.handleEpgCache(this.channels, callback);
-                } catch (err) {
-                    console.log('Failure during handle epg cache processing', err);
+            while (pendingPages.length > 0) {
+                const page = await pendingPages.shift();
+                requestNextPage();
+                if (page && page.entries) {
+                    this.addTVHEvents(page, channelsByUuid);
+                    console.log('epg events received: %d of %d', page.entries.length, page.totalCount);
+                    // notify calling component
+                    callback(this.channels);
                 }
-            })
-            .catch((error) => {
-                console.log('Failed to retrieve epg data: ', JSON.stringify(error));
-            });
+            }
+        } catch (error) {
+            console.log('Failed to retrieve epg data: ', JSON.stringify(error));
+            return;
+        }
+
+        console.log('processed all epg events');
+
+        try {
+            this.epgCacheService.handleEpgCache(this.channels, callback);
+        } catch (err) {
+            console.log('Failure during handle epg cache processing', err);
+        }
     }
 }

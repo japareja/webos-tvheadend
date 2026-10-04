@@ -345,11 +345,11 @@ const ChannelInfo = (props: { unmount: () => void }) => {
     }, []);
 
     useEffect(() => {
-        // update the canvas in short intervals, to display the remaining time live
+        // update the canvas every second, to display the running time live (seconds is the finest unit shown)
         intervalReference.current && clearInterval(intervalReference.current);
         intervalReference.current = setInterval(() => {
             updateCanvas();
-        }, 500);
+        }, 1000);
 
         updateCanvas();
         resetUnmountTimeout();

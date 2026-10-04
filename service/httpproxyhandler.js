@@ -5,6 +5,16 @@ const crypto = require('crypto');
 
 exports.proxy = proxy;
 
+// reuse connections to tvheadend instead of opening a new one for every api call
+var httpAgent = new http.Agent({ keepAlive: true, maxSockets: 8 });
+var httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 8 });
+
+// last authentication challenge per server and user, used to authenticate preemptively
+// so we don't need an extra 401 round trip for every request
+var authChallenges = {};
+
+var REQUEST_TIMEOUT = 5000;
+
 function proxy(message) {
     /** local node js mock setup
     function MockMessage() { };
@@ -27,10 +37,36 @@ function proxy(message) {
         host: parsedURL.hostname,
         port: parsedURL.port,
         path: parsedURL.path,
-        method: message.payload.method || 'GET'
+        method: message.payload.method || 'GET',
+        agent: parsedURL.protocol === 'https:' ? httpsAgent : httpAgent,
+        headers: {}
     };
 
-    request(options, user, password, message);
+    var state = {
+        authKey: parsedURL.protocol + '//' + parsedURL.host + '|' + user,
+        challenged: false,
+        connectionRetried: false,
+        responded: false
+    };
+
+    // authenticate preemptively with the last known challenge
+    var challenge = user ? authChallenges[state.authKey] : undefined;
+    if (challenge) {
+        options.headers.Authorization = createAuthorizationHeader(options, user, password, challenge);
+    }
+
+    request(options, user, password, message, state);
+}
+
+/**
+ * make sure every message is only answered once
+ */
+function respond(message, state, response) {
+    if (state.responded) {
+        return;
+    }
+    state.responded = true;
+    message.respond(response);
 }
 
 /**
@@ -75,21 +111,23 @@ function unq(quotedString) {
  * @param {http.RequestOptions} options
  * @param {WebOSTV.OnCompleteResponse} message
  */
-function request(options, user, password, message) {
+function request(options, user, password, message, state) {
     var protocolHandler = options.protocol === 'https:' ? https : http;
+    var timedOut = false;
     var req = protocolHandler
         .request(options, function (resp) {
             var data = '';
-            // handle http status unauthorized only if did not already tried to authorize
-            if (
-                resp.statusCode === 401 &&
-                (options.headers === undefined || options.headers.Authorization === undefined)
-            ) {
+            // handle http status unauthorized only if did not already answer a fresh challenge
+            if (resp.statusCode === 401 && !state.challenged) {
+                // drain the response, so the connection can be reused
+                resp.resume();
+                delete authChallenges[state.authKey];
                 var authHeader = resp.headers['www-authenticate'];
-                handleAuthentication(options, user, password, authHeader, message);
+                handleAuthentication(options, user, password, authHeader, message, state);
             } else if (resp.statusCode < 200 || resp.statusCode > 299) {
+                resp.resume();
                 // return error in case of unexpected status code
-                message.respond({
+                respond(message, state, {
                     returnValue: false,
                     errorText: 'Server answered with StatusCode ' + resp.statusCode,
                     errorCode: 1,
@@ -97,66 +135,106 @@ function request(options, user, password, message) {
                 });
                 //console.log(resp.statusCode, resp);
             } else {
+                // decode as utf8 stream, so multibyte characters split between chunks stay intact
+                resp.setEncoding('utf8');
                 // A chunk of data has been recieved.
                 resp.on('data', function (chunk) {
                     data += chunk;
                 });
                 // The whole response has been received. Print out the result.
                 resp.on('end', function () {
-                    message.respond({
+                    respond(message, state, {
                         returnValue: true,
                         result: data,
                         statusCode: resp.statusCode
                     });
                 });
+                resp.on('aborted', function () {
+                    respond(message, state, {
+                        returnValue: false,
+                        errorText: 'Connection closed before the response was complete',
+                        errorCode: 1
+                    });
+                });
             }
         })
         .on('error', function (err) {
+            // a kept alive connection might have been closed by the server in the meantime -> retry once
+            if (!timedOut && !state.connectionRetried && (err.code === 'ECONNRESET' || err.code === 'EPIPE')) {
+                state.connectionRetried = true;
+                request(options, user, password, message, state);
+                return;
+            }
             console.log('error:', err.message);
-            message.respond({
+            respond(message, state, {
                 returnValue: false,
-                errorText: err.message,
+                errorText: timedOut ? 'Request timed out' : err.message,
                 errorCode: 1
             });
-        })
-        .on('socket', function (socket) {
-            socket.setTimeout(5000);
-            socket.on('timeout', function () {
-                req.destroy();
-            });
         });
+    req.setTimeout(REQUEST_TIMEOUT, function () {
+        timedOut = true;
+        req.abort();
+    });
     req.end();
 }
 
-function handleAuthentication(options, user, password, authHeader, message) {
+function handleAuthentication(options, user, password, authHeader, message, state) {
+    if (!authHeader) {
+        respond(message, state, {
+            returnValue: false,
+            errorText: 'Server answered with StatusCode 401',
+            errorCode: 1,
+            statusCode: 401
+        });
+        return;
+    }
 
+    var challenge = parseChallenge(authHeader);
+    if (challenge.type !== 'Digest' && challenge.type !== 'Basic') {
+        respond(message, state, {
+            returnValue: false,
+            errorText: 'Unsupported authentication type ' + challenge.type,
+            errorCode: 1
+        });
+        return;
+    }
+    authChallenges[state.authKey] = challenge;
+    options.headers = options.headers || {};
+    options.headers.Authorization = createAuthorizationHeader(options, user, password, challenge);
+
+    // request again with authorization header
+    state.challenged = true;
+    request(options, user, password, message, state);
+}
+
+/**
+ * parse the www-authenticate header
+ */
+function parseChallenge(authHeader) {
     var ws = '(?:(?:\\r\\n)?[ \\t])+',
         token = '(?:[\\x21\\x23-\\x27\\x2A\\x2B\\x2D\\x2E\\x30-\\x39\\x3F\\x41-\\x5A\\x5E-\\x7A\\x7C\\x7E]+)',
         quotedString = '"(?:[\\x00-\\x0B\\x0D-\\x21\\x23-\\x5B\\\\x5D-\\x7F]|' + ws + '|\\\\[\\x00-\\x7F])*"',
         tokenizer = RegExp(token + '(?:=(?:' + quotedString + '|' + token + '))?', 'g');
 
-    var tokens = authHeader.match(tokenizer);
-    var type = tokens[0];
-    var authorizationHeader = null;
     //'Digest realm="tvheadend", qop="auth", nonce="b8/cJWAebqXycYezwKvNRZL/gi9NL1jUeCHjTiphh30=", opaque="wpjG3XYw4UxxNM9lSbjaJqfDTkvCAAJLd4k5Nt6HH4E="'
-    if (type === 'Digest') {
-        authorizationHeader = digestAuth(options, user, password, tokens);
-    } else if (type === 'Basic') {
-        authorizationHeader = basicAuth(user, password);
-    } else {
-        message.respond({
-            returnValue: false,
-            errorText: 'Unsupported authentication type ' + type,
-            errorCode: 1
-        });
-        return;
+    var tokens = authHeader.match(tokenizer) || [];
+    var challenge = { type: tokens[0] };
+    for (var i = 1; i < tokens.length; i++) {
+        var value = tokens[i];
+        if (value.match('nonce')) challenge.nonce = unq(value.substring(value.indexOf('=') + 1));
+        if (value.match('realm')) challenge.realm = unq(value.substring(value.indexOf('=') + 1));
+        if (value.match('qop')) challenge.qop = unq(value.substring(value.indexOf('=') + 1));
+        if (value.match('algorithm')) challenge.algorithm = unq(value.substring(value.indexOf('=') + 1));
     }
-    options.headers = options.headers || {};
-    options.headers.Authorization = authorizationHeader;
+    return challenge;
+}
 
-    console.log('auth options:', options);
-    // request again with authorization header
-    request(options, user, password, message);
+function createAuthorizationHeader(options, user, password, challenge) {
+    if (challenge.type === 'Digest') {
+        return digestAuth(options, user, password, challenge);
+    }
+    return basicAuth(user, password);
 }
 
 /**
@@ -176,17 +254,14 @@ function basicAuth(user, password) {
  * @param {http.RequestOptions} options
  * @param {String} user
  * @param {String} password
- * @param {String[]} tokens
+ * @param {Object} challenge parsed www-authenticate header
  */
-function digestAuth(options, user, password, tokens) {
-    var nonce, realm, qop, algorithm, mappedAlgorithm;
-    for (var i = 1; i < tokens.length; i++) {
-        var value = tokens[i];
-        if (value.match('nonce')) nonce = unq(value.substring(value.indexOf('=') + 1));
-        if (value.match('realm')) realm = unq(value.substring(value.indexOf('=') + 1));
-        if (value.match('qop')) qop = unq(value.substring(value.indexOf('=') + 1));
-        if (value.match('algorithm')) algorithm = unq(value.substring(value.indexOf('=') + 1));
-    }
+function digestAuth(options, user, password, challenge) {
+    var nonce = challenge.nonce,
+        realm = challenge.realm,
+        qop = challenge.qop,
+        algorithm = challenge.algorithm,
+        mappedAlgorithm;
 
     switch (algorithm) {
         case 'SHA-256': mappedAlgorithm = 'sha256'; break;
