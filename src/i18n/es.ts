@@ -50,8 +50,13 @@ const es: { [text: string]: string } = {
     'Loading...': 'Cargando...',
     Swap: 'Intercambiar',
     Close: 'Cerrar',
-    'Picture in picture could not be started. Your TV might not support two videos at once.':
-        'No se ha podido iniciar la imagen en imagen. Puede que tu TV no permita dos vídeos a la vez.',
+    'Picture in picture could not be started: {0}.': 'No se ha podido iniciar la imagen en imagen: {0}.',
+    'the second video did not start within {0} s': 'el segundo vídeo no ha arrancado en {0} s',
+    'the second video stopped the main video': 'el segundo vídeo ha detenido el vídeo principal',
+    'the TV rejected the second video': 'la TV ha rechazado el segundo vídeo',
+    'the TV rejected the second video ({0})': 'la TV ha rechazado el segundo vídeo ({0})',
+    'Try a low resolution streaming profile for picture in picture in the setup.':
+        'Prueba con un perfil de streaming de baja resolución para la imagen en imagen en Ajustes.',
 
     // search
     'Program title': 'Título del programa',

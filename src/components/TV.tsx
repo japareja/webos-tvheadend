@@ -14,12 +14,16 @@ import Spinner from '@enact/moonstone/Spinner';
 import { Panel } from '@enact/moonstone/Panels';
 import { AppViewState } from '../App';
 import MediaUtils from '../utils/MediaUtils';
-import PipWindow from './PipWindow';
+import PipWindow, { PIP_START_TIMEOUT_MILLIS } from './PipWindow';
 import { getLanguage, t } from '../i18n/I18n';
 
 // if channels are switched faster than this, only the last selected channel gets started
 const ZAP_DEBOUNCE_MILLIS = 400;
 const MESSAGE_DURATION_MILLIS = 6000;
+// the pip failure message is longer, it stays a bit longer
+const PIP_FAILURE_MESSAGE_MILLIS = 12000;
+// the main video may pause shortly while the pip video starts
+const PIP_PAUSE_TOLERANCE_MILLIS = 2000;
 // channel numbers can have up to 4 digits (e.g. iptv channels)
 const MAX_CHANNEL_NUMBER_DIGITS = 4;
 // reconnect if the stream stalls for this time, with an increasing delay between the attempts
@@ -52,6 +56,7 @@ const TV = () => {
     const lastSourceChange = useRef(0);
     const restartAfterPipFailure = useRef(false);
     const timeoutMessage = useRef<NodeJS.Timeout | null>(null);
+    const timeoutPipPauseCheck = useRef<NodeJS.Timeout | null>(null);
     const timeoutReconnect = useRef<NodeJS.Timeout | null>(null);
     const timeoutStall = useRef<NodeJS.Timeout | null>(null);
     const reconnectAttempts = useRef(0);
@@ -190,10 +195,10 @@ const TV = () => {
 
     const getMediaElement = () => video.current;
 
-    const showMessage = (text: string) => {
+    const showMessage = (text: string, duration = MESSAGE_DURATION_MILLIS) => {
         setMessage(text);
         timeoutMessage.current && clearTimeout(timeoutMessage.current);
-        timeoutMessage.current = setTimeout(() => setMessage(''), MESSAGE_DURATION_MILLIS);
+        timeoutMessage.current = setTimeout(() => setMessage(''), duration);
     };
 
     /**
@@ -250,7 +255,23 @@ const TV = () => {
         console.log('picture in picture failed:', reason);
         restartAfterPipFailure.current = true;
         setPipChannelPosition(null);
-        showMessage(t('Picture in picture could not be started. Your TV might not support two videos at once.'));
+
+        let reasonText;
+        if (reason === 'timeout') {
+            reasonText = t('the second video did not start within {0} s', PIP_START_TIMEOUT_MILLIS / 1000);
+        } else if (reason === 'main video interrupted') {
+            reasonText = t('the second video stopped the main video');
+        } else if (reason === 'rejected') {
+            reasonText = t('the TV rejected the second video');
+        } else {
+            reasonText = t('the TV rejected the second video ({0})', reason);
+        }
+        let text = t('Picture in picture could not be started: {0}.', reasonText);
+        if (!pipSettings.profile) {
+            // a low resolution stream needs much less of the decoder
+            text += ' ' + t('Try a low resolution streaming profile for picture in picture in the setup.');
+        }
+        showMessage(text, PIP_FAILURE_MESSAGE_MILLIS);
     };
 
     /**
@@ -260,9 +281,18 @@ const TV = () => {
     const handleMainVideoPause = () => {
         const videoElement = getMediaElement();
         // pauses without a source attached come from our own player resets
-        if (pipChannelPosition !== null && videoElement?.firstChild && !videoElement.ended) {
-            handlePipFailed('main video interrupted');
+        if (pipChannelPosition === null || !videoElement?.firstChild || videoElement.ended) {
+            return;
         }
+        // a short pause while the second video starts is fine, only fail if the main video stays paused
+        timeoutPipPauseCheck.current && clearTimeout(timeoutPipPauseCheck.current);
+        timeoutPipPauseCheck.current = setTimeout(() => {
+            timeoutPipPauseCheck.current = null;
+            const currentVideoElement = getMediaElement();
+            if (currentVideoElement && currentVideoElement.firstChild && currentVideoElement.paused) {
+                handlePipFailed('main video interrupted');
+            }
+        }, PIP_PAUSE_TOLERANCE_MILLIS);
     };
 
     const toggleRecording = (epgEvent: EPGEvent, callback?: () => unknown) => {
@@ -555,6 +585,12 @@ const TV = () => {
     };
 
     useEffect(() => {
+        // no pause check for a closed pip window
+        if (pipChannelPosition === null && timeoutPipPauseCheck.current) {
+            clearTimeout(timeoutPipPauseCheck.current);
+            timeoutPipPauseCheck.current = null;
+        }
+
         // the pip video is released now, restart the main video if it was interrupted
         if (pipChannelPosition === null && restartAfterPipFailure.current) {
             restartAfterPipFailure.current = false;
@@ -577,6 +613,7 @@ const TV = () => {
             videoElement && videoElement.removeEventListener('resize', updateVideoQuality);
             timeoutMessage.current && clearTimeout(timeoutMessage.current);
             timeoutChangeChannel.current && clearTimeout(timeoutChangeChannel.current);
+            timeoutPipPauseCheck.current && clearTimeout(timeoutPipPauseCheck.current);
             if (!videoElement) return;
             resetPlayer(videoElement);
         };

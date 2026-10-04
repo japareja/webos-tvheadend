@@ -5,7 +5,8 @@ import '../styles/app.css';
 import { t } from '../i18n/I18n';
 
 // if the pip stream is not playing after this time, we assume the tv can't play a second video
-const PIP_START_TIMEOUT_MILLIS = 10000;
+// (transcoding profiles take a while to start, so this is generous)
+export const PIP_START_TIMEOUT_MILLIS = 20000;
 const PIP_HINT_DURATION_MILLIS = 5000;
 
 /**
@@ -57,7 +58,7 @@ const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (re
             MediaUtils.PIP_MAX_HEIGHT
         );
         // fired when none of the sources could be played
-        const handleSourceError = () => fail('source error');
+        const handleSourceError = () => fail('rejected');
         lastSource.addEventListener('error', handleSourceError);
 
         const playPromise = videoElement.play();
@@ -66,6 +67,7 @@ const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (re
         }
 
         startTimeout.current = setTimeout(() => fail('timeout'), PIP_START_TIMEOUT_MILLIS);
+        console.log('starting pip stream %s', streamUrl.toString());
         const hintTimeout = setTimeout(() => setIsHintVisible(false), PIP_HINT_DURATION_MILLIS);
 
         return () => {
@@ -84,7 +86,7 @@ const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (re
                 className="pipVideo"
                 preload="none"
                 onPlaying={handlePlaying}
-                onError={() => fail('video error')}
+                onError={() => fail('error ' + (video.current?.error?.code || '?'))}
             ></video>
             {!isPlaying && <div className="pipStatus">{t('Loading...')}</div>}
             {isHintVisible && (
