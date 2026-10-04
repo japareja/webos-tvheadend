@@ -57,8 +57,8 @@ const es: { [text: string]: string } = {
     'the TV rejected the second video ({0})': 'la TV ha rechazado el segundo vídeo ({0})',
     'Checking why picture in picture could not be started...':
         'Comprobando por qué no se ha podido iniciar la imagen en imagen...',
-    'TVHeadend delivers the picture in picture stream, but this TV does not play a second video at the same time{0}.':
-        'TVHeadend entrega el vídeo de la imagen en imagen, pero esta TV no reproduce un segundo vídeo a la vez{0}.',
+    'TVHeadend accepts the picture in picture request, but the video did not play{0}. Either the TV does not play a second video at the same time, or TVHeadend could not prepare the stream with this profile (see its log).':
+        'TVHeadend acepta la petición de la imagen en imagen, pero el vídeo no se ha reproducido{0}. O la TV no reproduce un segundo vídeo a la vez, o TVHeadend no ha podido preparar el vídeo con ese perfil (revisa su log).',
     'Direct access to the stream: {0}.': 'Acceso directo al vídeo: {0}.',
     yes: 'sí',
     no: 'no',

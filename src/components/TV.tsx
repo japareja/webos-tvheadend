@@ -27,8 +27,11 @@ const PIP_PAUSE_TOLERANCE_MILLIS = 2000;
 // channel numbers can have up to 4 digits (e.g. iptv channels)
 const MAX_CHANNEL_NUMBER_DIGITS = 4;
 // reconnect if the stream stalls for this time, with an increasing delay between the attempts
-const STALL_TIMEOUT_MILLIS = 15000;
-const MAX_RECONNECT_ATTEMPTS = 5;
+// p2p sources like acestream need a long time until the first picture, so the first start gets much more time
+// than a stall during playback; reconnecting too early restarts such sources over and over
+const START_TIMEOUT_MILLIS = 90000;
+const STALL_TIMEOUT_MILLIS = 30000;
+const MAX_RECONNECT_ATTEMPTS = 3;
 
 export enum State {
     TV = 'tv',
@@ -288,12 +291,12 @@ const TV = () => {
         showMessage(t('Checking why picture in picture could not be started...'), PIP_FAILURE_MESSAGE_MILLIS);
         tvhDataService.diagnoseStream(streamUrl).then((diagnosis) => {
             if (diagnosis.isAccessible) {
-                // tvheadend delivers the stream, so it's the tv that can't play a second video.
+                // tvheadend accepts the request, but a HEAD request doesn't start transcoding, so a failing profile can't be ruled out.
                 // Also find out whether the app could read the stream itself (to decode it without the video element)
                 MediaUtils.canReadStreamDirectly(streamUrl).then((canRead) => {
                     showMessage(
                         t(
-                            'TVHeadend delivers the picture in picture stream, but this TV does not play a second video at the same time{0}.',
+                            'TVHeadend accepts the picture in picture request, but the video did not play{0}. Either the TV does not play a second video at the same time, or TVHeadend could not prepare the stream with this profile (see its log).',
                             reasonCode
                         ) +
                             ' ' +
@@ -543,7 +546,9 @@ const TV = () => {
 
     const startStallTimeout = () => {
         clearStallTimeout();
-        timeoutStall.current = setTimeout(() => scheduleReconnect('stalled'), STALL_TIMEOUT_MILLIS);
+        // until the stream played for the first time, it gets the (long) start timeout
+        const timeout = startupMillis.current === undefined ? START_TIMEOUT_MILLIS : STALL_TIMEOUT_MILLIS;
+        timeoutStall.current = setTimeout(() => scheduleReconnect('stalled'), timeout);
     };
 
     const handleVideoPlaying = () => {
