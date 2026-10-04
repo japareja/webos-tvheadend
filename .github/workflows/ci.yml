@@ -35,6 +35,11 @@ jobs:
               env:
                   CI: false
 
+            # the webOS cli tools need a newer node version than the build
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
             - name: Package webOS app
               run: npx -y -p @webos-tools/cli ares-package build service -o dist
 
