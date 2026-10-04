@@ -1,5 +1,23 @@
 import '@procot/webostv/webOSTV';
 
+// system services that don't answer must not block the app start
+const SYSTEM_CALL_TIMEOUT_MILLIS = 10000;
+
+const withTimeout = <T>(promise: Promise<T>, name: string): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+        const timeout = setTimeout(() => reject({ errorText: name + ' did not answer' }), SYSTEM_CALL_TIMEOUT_MILLIS);
+        promise.then(
+            (result) => {
+                clearTimeout(timeout);
+                resolve(result);
+            },
+            (error) => {
+                clearTimeout(timeout);
+                reject(error);
+            }
+        );
+    });
+
 /**
  * Depending on local development or emulator usage
  * the service bridge is differen
@@ -8,7 +26,7 @@ import '@procot/webostv/webOSTV';
  */
 export default class LunaServiceAdapter implements LunaServiceInterface {
     isAvailable(): boolean {
-        const isAvailable = (global.webOS && global.webOS.service) ? true : false;
+        const isAvailable = global.webOS && global.webOS.service ? true : false;
         return isAvailable;
     }
 
@@ -32,6 +50,10 @@ export default class LunaServiceAdapter implements LunaServiceInterface {
     }
 
     getLocaleInfo(): Promise<LocaleInfoSuccessResponse> {
+        return withTimeout(this.requestLocaleInfo(), 'settingsservice');
+    }
+
+    private requestLocaleInfo(): Promise<LocaleInfoSuccessResponse> {
         return new Promise<LocaleInfoSuccessResponse>(function (resolve, reject) {
             global.webOS.service.request('luna://com.webos.settingsservice', {
                 method: 'getSystemSettings',
@@ -45,6 +67,10 @@ export default class LunaServiceAdapter implements LunaServiceInterface {
     }
 
     getDeviceInfo(): Promise<DeviceInfoSuccessResponse> {
+        return withTimeout(this.requestDeviceInfo(), 'systemproperty');
+    }
+
+    private requestDeviceInfo(): Promise<DeviceInfoSuccessResponse> {
         return new Promise<DeviceInfoSuccessResponse>(function (resolve, reject) {
             global.webOS.service.request('luna://com.webos.service.tv.systemproperty', {
                 method: 'getSystemInfo',
@@ -58,6 +84,10 @@ export default class LunaServiceAdapter implements LunaServiceInterface {
     }
 
     getNetworkInfo(): Promise<ConnectionMgrResponse> {
+        return withTimeout(this.requestNetworkInfo(), 'connectionmanager');
+    }
+
+    private requestNetworkInfo(): Promise<ConnectionMgrResponse> {
         return new Promise<ConnectionMgrResponse>(function (resolve, reject) {
             global.webOS.service.request('luna://com.palm.connectionmanager', {
                 method: 'getStatus',

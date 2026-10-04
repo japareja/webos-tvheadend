@@ -554,6 +554,50 @@ export default class TVHDataService {
     }
 
     /** request an url in head mode */
+    /**
+     * Find out why a stream can't be played: request it like the video element does (without
+     * credentials) and translate the answer of tvheadend. Fatal problems won't go away by retrying.
+     */
+    async diagnoseStream(url: URL): Promise<{ message: string; isFatal: boolean }> {
+        try {
+            await this.retrieveTest(url, false);
+            return {
+                message: t(
+                    'TVHeadend gives access to the channel, but it could not be started (no free tuner, no signal, encrypted channel or format not supported by the TV).'
+                ),
+                isFatal: false
+            };
+        } catch (error) {
+            const statusCode = error && (error as ProxyErrorResponse).statusCode;
+            switch (statusCode) {
+                case 401:
+                    return {
+                        message: t(
+                            'TVHeadend asks for a password for the stream. Enable "Persistent authentication" for the user in TVHeadend (Configuration > Users > Passwords) and connect again in the setup.'
+                        ),
+                        isFatal: true
+                    };
+                case 403:
+                    return {
+                        message: t('The TVHeadend user is not allowed to watch this channel (check its access entry).'),
+                        isFatal: true
+                    };
+                case 404:
+                    return { message: t('TVHeadend does not know this channel anymore, reload the channels.'), isFatal: true };
+                case 503:
+                    return { message: t('TVHeadend has no free tuner for this channel.'), isFatal: false };
+                default:
+                    return {
+                        message: t(
+                            'TVHeadend is not reachable from the TV: {0}',
+                            (error && (error as ProxyErrorResponse).errorText) || String(statusCode)
+                        ),
+                        isFatal: false
+                    };
+            }
+        }
+    }
+
     retrieveTest(url: URL | string, withCredentials?: boolean) {
         return this.httpProxyServiceAdapter.call({
             url: url.toString(),

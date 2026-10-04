@@ -27,6 +27,17 @@ const es: { [text: string]: string } = {
     Off: 'Desactivados',
     'Track {0}': 'Pista {0}',
 
+    'TVHeadend gives access to the channel, but it could not be started (no free tuner, no signal, encrypted channel or format not supported by the TV).':
+        'TVHeadend da acceso al canal, pero no se ha podido iniciar (sin sintonizador libre, sin señal, canal codificado o formato no compatible con la TV).',
+    'TVHeadend asks for a password for the stream. Enable "Persistent authentication" for the user in TVHeadend (Configuration > Users > Passwords) and connect again in the setup.':
+        'TVHeadend pide contraseña para el vídeo. Activa "Persistent authentication" para el usuario en TVHeadend (Configuración > Usuarios > Contraseñas) y vuelve a conectar en Ajustes.',
+    'The TVHeadend user is not allowed to watch this channel (check its access entry).':
+        'El usuario de TVHeadend no tiene permiso para ver este canal (revisa su entrada de acceso).',
+    'TVHeadend does not know this channel anymore, reload the channels.':
+        'TVHeadend ya no tiene este canal, vuelve a cargar los canales.',
+    'TVHeadend has no free tuner for this channel.': 'TVHeadend no tiene ningún sintonizador libre para este canal.',
+    'TVHeadend is not reachable from the TV: {0}': 'La TV no puede conectar con TVHeadend: {0}',
+
     // channel groups
     'All channels': 'Todos los canales',
     Favorites: 'Favoritos',

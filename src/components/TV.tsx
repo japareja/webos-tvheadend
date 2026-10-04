@@ -55,6 +55,9 @@ const TV = () => {
     const timeoutReconnect = useRef<NodeJS.Timeout | null>(null);
     const timeoutStall = useRef<NodeJS.Timeout | null>(null);
     const reconnectAttempts = useRef(0);
+    // identifies the current playback, so late diagnosis results of a previous channel are ignored
+    const playbackId = useRef(0);
+    const lastDiagnosis = useRef('');
     // the channel shown before the current one, for the back button
     const previousChannelPosition = useRef<number | null>(null);
     const shownChannelPosition = useRef<number | null>(null);
@@ -68,6 +71,8 @@ const TV = () => {
     const [pipChannelPosition, setPipChannelPosition] = useState<number | null>(null);
     const [message, setMessage] = useState('');
     const [videoQuality, setVideoQuality] = useState('');
+    // shown instead of the spinner if the channel can't be played
+    const [playbackError, setPlaybackError] = useState('');
 
     const focus = () => tvWrapper.current?.focus();
 
@@ -412,9 +417,14 @@ const TV = () => {
         if (!videoElement || !currentChannel || timeoutReconnect.current) return;
         clearStallTimeout();
 
+        // on the first failure ask tvheadend what is wrong
+        if (reconnectAttempts.current === 0) {
+            diagnosePlayback(currentChannel.getStreamUrl());
+        }
+
         if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
             console.log('giving up to reconnect: %s', reason);
-            showMessage(t('The channel could not be played'));
+            setPlaybackError(lastDiagnosis.current || t('The channel could not be played'));
             return;
         }
 
@@ -429,6 +439,22 @@ const TV = () => {
         }, delay);
     };
 
+    const diagnosePlayback = (streamUrl: URL) => {
+        if (!tvhDataService) return;
+        const diagnosedPlaybackId = playbackId.current;
+        tvhDataService.diagnoseStream(streamUrl).then((diagnosis) => {
+            if (diagnosedPlaybackId !== playbackId.current) return;
+            console.log('stream diagnosis:', diagnosis.message);
+            lastDiagnosis.current = diagnosis.message;
+            if (diagnosis.isFatal) {
+                // retrying won't help, stop and tell the user why
+                clearReconnect();
+                clearStallTimeout();
+                setPlaybackError(diagnosis.message);
+            }
+        });
+    };
+
     const startStallTimeout = () => {
         clearStallTimeout();
         timeoutStall.current = setTimeout(() => scheduleReconnect('stalled'), STALL_TIMEOUT_MILLIS);
@@ -437,6 +463,7 @@ const TV = () => {
     const handleVideoPlaying = () => {
         clearStallTimeout();
         reconnectAttempts.current = 0;
+        setPlaybackError('');
         setIsVideoPlaying(true);
     };
 
@@ -465,6 +492,9 @@ const TV = () => {
         // stop the current stream right away, so tvheadend can release the tuner
         resetPlayer(videoElement);
         reconnectAttempts.current = 0;
+        playbackId.current++;
+        lastDiagnosis.current = '';
+        setPlaybackError('');
         setIsVideoPlaying(false);
 
         // start a single channel change immediately, but debounce fast zapping so we
@@ -610,7 +640,9 @@ const TV = () => {
                 <ChannelHeader channelNumberText={channelNumberText} unmount={() => setChannelNumberText('')} />
             )}
 
-            {!isVideoPlaying && <Spinner centered component={Panel}></Spinner>}
+            {!isVideoPlaying && !playbackError && <Spinner centered component={Panel}></Spinner>}
+
+            {playbackError !== '' && <div className="playbackError">{playbackError}</div>}
 
             {pipChannelPosition !== null && epgData.getChannel(pipChannelPosition) && (
                 <PipWindow

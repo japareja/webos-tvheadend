@@ -8,6 +8,14 @@
                 {
                     "name": "proxy",
                     "public": true
+                },
+                {
+                    "name": "fileIO",
+                    "public": true
+                },
+                {
+                    "name": "ping",
+                    "public": true
                 }
             ]
         }
