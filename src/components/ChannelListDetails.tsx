@@ -4,6 +4,7 @@ import EPGChannel from '../models/EPGChannel';
 import EPGEvent from '../models/EPGEvent';
 import EPGUtils from '../utils/EPGUtils';
 import { t } from '../i18n/I18n';
+import RichText from './RichText';
 
 const ChannelListDetails = (props: {
     isRecording: (event: EPGEvent) => boolean;
@@ -64,14 +65,16 @@ const ChannelListDetails = (props: {
             </div>
             <div className="title">
                 {props.currentEvent && props.isRecording(props.currentEvent) && <div className="rec"></div>}
-                {props.currentEvent?.getTitle() || t('No Information')}
+                {props.currentEvent ? <RichText text={props.currentEvent.getRawTitle()} /> : t('No Information')}
             </div>
-            <div className="subTitle">{props.currentEvent?.getSubTitle() || ''}</div>
+            <div className="subTitle">
+                <RichText text={props.currentEvent?.getRawSubTitle()} />
+            </div>
             <div className="desc">
                 {props.currentEvent?.getImage() && (
                     <img className="eventImage" src={props.currentEvent.getImage()} alt="" />
                 )}
-                {props.currentEvent?.getDescription() || ''}
+                <RichText text={props.currentEvent?.getRawDescription()} />
             </div>
             <div className="next">
                 <div className="separator"></div>

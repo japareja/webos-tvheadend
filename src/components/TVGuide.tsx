@@ -6,6 +6,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import Rect from '../models/Rect';
 import EPGUtils from '../utils/EPGUtils';
 import CanvasUtils from '../utils/CanvasUtils';
+import KodiMarkup from '../utils/KodiMarkup';
 import EPGEvent from '../models/EPGEvent';
 import AppContext from '../AppContext';
 import '../styles/app.css';
@@ -332,8 +333,8 @@ const TVGuide = (props: {
                 drawDetailsSubtitle(focusedEvent.getSubTitle(), canvas, drawingRect);
             }
             drawDetailsTimeInfo(focusedEvent, canvas, drawingRect);
-            if (focusedEvent.getDescription() !== undefined) {
-                drawDetailsDescription(focusedEvent.getDescription(), canvas, drawingRect);
+            if (focusedEvent.getRawDescription()) {
+                drawDetailsDescription(focusedEvent.getRawDescription(), canvas, drawingRect);
             }
         }
     };
@@ -365,10 +366,20 @@ const TVGuide = (props: {
         const drect = drawingRect.clone();
         drect.right = getWidth() - 10;
         drect.top += (mDetailsLayoutTitleTextSize + mDetailsLayoutPadding) * 2 + 3;
-        // draw title, description etc
-        canvas.font = mDetailsLayoutDescriptionTextSize + 'px Moonstone';
-        canvas.fillStyle = mDetailsLayoutTextColor;
-        CanvasUtils.wrapText(canvas, description, drect.left, drect.top, drect.width, mDetailsLayoutTitleTextSize + 5);
+        // draw description, kodi formatting codes like [COLOR tomato] or [CR] are interpreted
+        CanvasUtils.wrapRichText(
+            canvas,
+            KodiMarkup.parse(description),
+            drect.left,
+            drect.top,
+            drect.width,
+            mDetailsLayoutTitleTextSize + 5,
+            {
+                fontSize: mDetailsLayoutDescriptionTextSize,
+                fillStyle: mDetailsLayoutTextColor,
+                maxY: getHeight() - mDetailsLayoutMargin
+            }
+        );
     };
 
     const drawDetailsTimeInfo = (event: EPGEvent, canvas: CanvasRenderingContext2D, drawingRect: Rect) => {

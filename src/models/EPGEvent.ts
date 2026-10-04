@@ -1,4 +1,5 @@
 import EPGUtils from '../utils/EPGUtils';
+import KodiMarkup from '../utils/KodiMarkup';
 
 /**
  * Created by satadru on 3/30/17.
@@ -15,11 +16,25 @@ export default class EPGEvent {
         private image?: string
     ) {}
 
+    // texts without kodi formatting codes, computed on first use
+    private plainTitle?: string;
+    private plainSubTitle?: string;
+    private plainDescription?: string;
+
     getId() {
         return this.id;
     }
 
+    /** title without formatting codes */
     getTitle() {
+        if (this.plainTitle === undefined) {
+            this.plainTitle = KodiMarkup.strip(this.title);
+        }
+        return this.plainTitle;
+    }
+
+    /** title as delivered by the epg, may contain kodi formatting codes like [COLOR red] */
+    getRawTitle() {
         return this.title;
     }
 
@@ -51,11 +66,29 @@ export default class EPGEvent {
         return now >= this.start && now <= this.end;
     }
 
+    /** description without formatting codes, line breaks are kept */
     getDescription() {
+        if (this.plainDescription === undefined) {
+            this.plainDescription = KodiMarkup.strip(this.description, true);
+        }
+        return this.plainDescription;
+    }
+
+    /** description as delivered by the epg, may contain kodi formatting codes */
+    getRawDescription() {
         return this.description;
     }
 
+    /** subtitle without formatting codes */
     getSubTitle() {
+        if (this.plainSubTitle === undefined) {
+            this.plainSubTitle = KodiMarkup.strip(this.subTitle);
+        }
+        return this.plainSubTitle;
+    }
+
+    /** subtitle as delivered by the epg, may contain kodi formatting codes */
+    getRawSubTitle() {
         return this.subTitle;
     }
 

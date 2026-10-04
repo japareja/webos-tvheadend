@@ -1,4 +1,5 @@
 import Rect from '../models/Rect';
+import { RichLine } from './KodiMarkup';
 
 export interface WriteTextOptions {
     fontSize?: number;
@@ -104,6 +105,66 @@ export default class CanvasUtils {
                 index -= 1;
             }
         }
+    }
+
+    /**
+     * Writes formatted text (e.g. parsed kodi markup) word wrapped into the given width.
+     * Drawing stops when maxY is reached.
+     */
+    static wrapRichText(
+        canvas: CanvasRenderingContext2D,
+        lines: RichLine[],
+        x: number,
+        y: number,
+        maxWidth: number,
+        lineHeight: number,
+        options: { fontSize: number; fontFace?: string; fillStyle: string; maxY?: number }
+    ) {
+        const fontFace = options.fontFace || 'Moonstone';
+        const oldTextAlign = canvas.textAlign;
+        canvas.textAlign = 'left';
+        let currentY = y;
+        const isBelowMax = () => options.maxY !== undefined && currentY > options.maxY;
+
+        for (let l = 0; l < lines.length && !isBelowMax(); l++) {
+            let currentX = x;
+            const line = lines[l];
+            for (let s = 0; s < line.length && !isBelowMax(); s++) {
+                const segment = line[s];
+                canvas.font =
+                    (segment.italic ? 'italic ' : '') +
+                    (segment.bold ? 'bold ' : '') +
+                    options.fontSize +
+                    'px ' +
+                    fontFace;
+                // an unknown color name is ignored by the canvas, so the default is set first
+                canvas.fillStyle = options.fillStyle;
+                if (segment.color) {
+                    canvas.fillStyle = segment.color;
+                }
+                // words and the whitespace between them
+                const words = segment.text.split(/(\s+)/);
+                for (let w = 0; w < words.length; w++) {
+                    const word = words[w];
+                    if (!word) continue;
+                    const width = canvas.measureText(word).width;
+                    if (/^\s+$/.test(word)) {
+                        // no whitespace at the beginning of a line
+                        if (currentX > x) currentX += width;
+                        continue;
+                    }
+                    if (currentX + width > x + maxWidth && currentX > x) {
+                        currentY += lineHeight;
+                        currentX = x;
+                        if (isBelowMax()) break;
+                    }
+                    canvas.fillText(word, currentX, currentY);
+                    currentX += width;
+                }
+            }
+            currentY += lineHeight;
+        }
+        canvas.textAlign = oldTextAlign;
     }
 
     /**

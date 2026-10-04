@@ -15,7 +15,7 @@ import { Panel } from '@enact/moonstone/Panels';
 import { AppViewState } from '../App';
 import MediaUtils from '../utils/MediaUtils';
 import PipWindow from './PipWindow';
-import { t } from '../i18n/I18n';
+import { getLanguage, t } from '../i18n/I18n';
 
 // if channels are switched faster than this, only the last selected channel gets started
 const ZAP_DEBOUNCE_MILLIS = 400;
@@ -58,6 +58,9 @@ const TV = () => {
     // identifies the current playback, so late diagnosis results of a previous channel are ignored
     const playbackId = useRef(0);
     const lastDiagnosis = useRef('');
+    // time from requesting the stream until the picture is shown
+    const streamRequestedAt = useRef(0);
+    const startupMillis = useRef<number | undefined>(undefined);
     // the channel shown before the current one, for the back button
     const previousChannelPosition = useRef<number | null>(null);
     const shownChannelPosition = useRef<number | null>(null);
@@ -368,6 +371,23 @@ const TV = () => {
         }
     };
 
+    const formatSeconds = (seconds: number) =>
+        seconds.toLocaleString(getLanguage(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+    /**
+     * quality, start time and buffer of the current stream for the channel info
+     */
+    const getPlaybackInfo = () => {
+        const parts: string[] = [];
+        videoQuality && parts.push(videoQuality);
+        startupMillis.current !== undefined &&
+            parts.push(t('start {0} s', formatSeconds(startupMillis.current / 1000)));
+        const videoElement = getMediaElement();
+        const bufferedAhead = videoElement && isVideoPlaying ? MediaUtils.getBufferedAhead(videoElement) : undefined;
+        bufferedAhead !== undefined && parts.push(t('buffer {0} s', formatSeconds(bufferedAhead)));
+        return parts.join(' · ');
+    };
+
     const updateVideoQuality = () => {
         const videoElement = getMediaElement();
         setVideoQuality(
@@ -461,6 +481,10 @@ const TV = () => {
     };
 
     const handleVideoPlaying = () => {
+        if (startupMillis.current === undefined && streamRequestedAt.current > 0) {
+            startupMillis.current = Date.now() - streamRequestedAt.current;
+            console.log('stream started after %dms', startupMillis.current);
+        }
         clearStallTimeout();
         reconnectAttempts.current = 0;
         setPlaybackError('');
@@ -469,6 +493,8 @@ const TV = () => {
 
     const startSource = (videoElement: HTMLVideoElement, dataUrl: URL) => {
         timeoutStartStream.current = null;
+        streamRequestedAt.current = Date.now();
+        startupMillis.current = undefined;
         const lastSource = MediaUtils.attachSource(videoElement, dataUrl);
         // fired if none of the sources could be played
         lastSource.addEventListener('error', () => {
@@ -665,7 +691,7 @@ const TV = () => {
 
             {state === State.CHANNEL_INFO && (
                 <ChannelInfo
-                    videoQuality={videoQuality}
+                    playbackInfo={getPlaybackInfo}
                     unmount={() => {
                         setState(State.TV);
                         setChannelNumberText('');

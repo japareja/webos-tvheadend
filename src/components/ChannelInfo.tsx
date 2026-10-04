@@ -6,16 +6,16 @@ import AppContext from '../AppContext';
 import '../styles/app.css';
 import { t } from '../i18n/I18n';
 
-const ChannelInfo = (props: { videoQuality?: string; unmount: () => void }) => {
+const ChannelInfo = (props: { playbackInfo?: () => string; unmount: () => void }) => {
     const { locale, epgData, imageCache, currentChannelPosition } = useContext(AppContext);
 
     const canvas = useRef<HTMLCanvasElement>(null);
     const infoWrapper = useRef<HTMLDivElement>(null);
     const timeoutReference = useRef<NodeJS.Timeout | null>(null);
     const intervalReference = useRef<NodeJS.Timeout | null>(null);
-    // the interval redraws with an old closure, so the latest quality is read from a ref
-    const videoQuality = useRef(props.videoQuality);
-    videoQuality.current = props.videoQuality;
+    // the interval redraws with an old closure, so the latest info function is read from a ref
+    const playbackInfo = useRef(props.playbackInfo);
+    playbackInfo.current = props.playbackInfo;
 
     const mChannelInfoHeight = 150;
     const mChannelInfoTitleSize = 42;
@@ -262,9 +262,10 @@ const ChannelInfo = (props: { videoQuality?: string; unmount: () => void }) => {
             drawingRect.left += mChannelInfoKeyRectWidth + mChannelLayoutPadding;
             CanvasUtils.writeText(canvas, t('EPG'), drawingRect.left, drawingRect.top + 5);
 
-            // draw video quality of the stream
-            if (videoQuality.current) {
-                CanvasUtils.writeText(canvas, videoQuality.current, getWidth() - mChannelLayoutPadding - 20, 22, {
+            // draw video quality, start time and buffer of the stream
+            const playbackInfoText = playbackInfo.current ? playbackInfo.current() : '';
+            if (playbackInfoText) {
+                CanvasUtils.writeText(canvas, playbackInfoText, getWidth() - mChannelLayoutPadding - 20, 22, {
                     fontSize: mChannelInfoKeyDescSize,
                     fillStyle: 'rgb(65, 182, 230)',
                     textAlign: 'right',
@@ -371,7 +372,7 @@ const ChannelInfo = (props: { videoQuality?: string; unmount: () => void }) => {
 
     useEffect(() => {
         updateCanvas();
-    }, [props.videoQuality]);
+    }, [props.playbackInfo]);
 
     const focus = () => {
         infoWrapper.current?.focus();

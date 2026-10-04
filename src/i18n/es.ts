@@ -25,6 +25,8 @@ const es: { [text: string]: string } = {
     'Channel {0} not found': 'No existe el canal {0}',
     'The channel could not be played': 'No se ha podido reproducir el canal',
     Off: 'Desactivados',
+    'start {0} s': 'inicio {0} s',
+    'buffer {0} s': 'búfer {0} s',
     'Track {0}': 'Pista {0}',
 
     'TVHeadend gives access to the channel, but it could not be started (no free tuner, no signal, encrypted channel or format not supported by the TV).':

@@ -9,6 +9,27 @@ export default class MediaUtils {
     // the picture in picture window only asks for a full hd decoder
     static PIP_MAX_WIDTH = 1920;
     static PIP_MAX_HEIGHT = 1080;
+    // set when the typed source failed on this tv but the untyped one played
+    static TYPED_SOURCE_DISABLED_KEY = 'typedSourceDisabled';
+
+    static isTypedSourceDisabled() {
+        try {
+            return localStorage.getItem(MediaUtils.TYPED_SOURCE_DISABLED_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Seconds of video that are buffered ahead of the current position, undefined if unknown
+     */
+    static getBufferedAhead(videoElement: HTMLVideoElement): number | undefined {
+        const buffered = videoElement.buffered;
+        if (!buffered || buffered.length === 0) {
+            return undefined;
+        }
+        return Math.max(0, buffered.end(buffered.length - 1) - videoElement.currentTime);
+    }
 
     /**
      * Returns a copy of the stream url that requests the given tvheadend streaming profile
@@ -110,19 +131,35 @@ export default class MediaUtils {
         maxHeight = MediaUtils.MAX_HEIGHT
     ) {
         const mimeType = MediaUtils.getMimeType(url);
+        const fallbackSource = document.createElement('source');
+        fallbackSource.setAttribute('src', url.toString());
 
-        if (mimeType) {
+        if (mimeType && !MediaUtils.isTypedSourceDisabled()) {
             const typedSource = document.createElement('source');
             typedSource.setAttribute('src', url.toString());
             typedSource.setAttribute(
                 'type',
                 mimeType + ';mediaOption=' + MediaUtils.getMediaOption(maxWidth, maxHeight)
             );
+            typedSource.addEventListener('error', () => {
+                if (typedSource.parentNode !== videoElement) return;
+                // if the untyped source plays, the typed one only costs start time on this tv -> don't use it anymore
+                const handlePlaying = () => {
+                    videoElement.removeEventListener('playing', handlePlaying);
+                    if (fallbackSource.parentNode === videoElement) {
+                        console.log('typed source not supported by this tv, using untyped sources from now on');
+                        try {
+                            localStorage.setItem(MediaUtils.TYPED_SOURCE_DISABLED_KEY, 'true');
+                        } catch {
+                            // only an optimization
+                        }
+                    }
+                };
+                videoElement.addEventListener('playing', handlePlaying);
+            });
             videoElement.appendChild(typedSource);
         }
 
-        const fallbackSource = document.createElement('source');
-        fallbackSource.setAttribute('src', url.toString());
         videoElement.appendChild(fallbackSource);
 
         return fallbackSource;

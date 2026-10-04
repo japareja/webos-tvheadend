@@ -48,9 +48,9 @@ const getChannelEvents = (channels: EPGChannel[]) => {
                 id: event.getId(),
                 start: event.getStart(),
                 end: event.getEnd(),
-                title: event.getTitle(),
-                description: event.getDescription(),
-                subTitle: event.getSubTitle(),
+                title: event.getRawTitle(),
+                description: event.getRawDescription(),
+                subTitle: event.getRawSubTitle(),
                 channelUuid: event.getChannelUuid(),
                 image: event.getImage()
             };
