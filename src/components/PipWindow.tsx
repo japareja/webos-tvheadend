@@ -13,10 +13,15 @@ const PIP_HINT_DURATION_MILLIS = 5000;
  * Small picture in picture window that plays a second channel (muted) with its own video element.
  * Whether this works depends on the tv providing a second hardware video decoder to the app.
  */
-const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (reason: string) => void }) => {
+const PipWindow = (props: {
+    channel: EPGChannel;
+    profile?: string;
+    onFailed: (reason: string, streamUrl: URL) => void;
+}) => {
     const video = useRef<HTMLVideoElement>(null);
     const startTimeout = useRef<NodeJS.Timeout | null>(null);
     const onFailed = useRef(props.onFailed);
+    const streamUrl = useRef<URL>(props.channel.getStreamUrl());
     const [isPlaying, setIsPlaying] = useState(false);
     const [isHintVisible, setIsHintVisible] = useState(true);
 
@@ -30,7 +35,7 @@ const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (re
 
     const fail = (reason: string) => {
         clearStartTimeout();
-        onFailed.current(reason);
+        onFailed.current(reason, streamUrl.current);
     };
 
     const handlePlaying = () => {
@@ -45,7 +50,7 @@ const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (re
         setIsPlaying(false);
         setIsHintVisible(true);
 
-        const streamUrl = props.profile
+        streamUrl.current = props.profile
             ? MediaUtils.withProfile(props.channel.getStreamUrl(), props.profile)
             : props.channel.getStreamUrl();
 
@@ -53,7 +58,7 @@ const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (re
         videoElement.muted = true;
         const lastSource = MediaUtils.attachSource(
             videoElement,
-            streamUrl,
+            streamUrl.current,
             MediaUtils.PIP_MAX_WIDTH,
             MediaUtils.PIP_MAX_HEIGHT
         );
@@ -67,7 +72,7 @@ const PipWindow = (props: { channel: EPGChannel; profile?: string; onFailed: (re
         }
 
         startTimeout.current = setTimeout(() => fail('timeout'), PIP_START_TIMEOUT_MILLIS);
-        console.log('starting pip stream %s', streamUrl.toString());
+        console.log('starting pip stream %s', streamUrl.current.toString());
         const hintTimeout = setTimeout(() => setIsHintVisible(false), PIP_HINT_DURATION_MILLIS);
 
         return () => {

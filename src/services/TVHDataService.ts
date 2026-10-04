@@ -522,8 +522,7 @@ export default class TVHDataService {
                 const parserResult = M3UParser.parse(result);
                 const channelNumbers = parserResult.items.map((item) => parseFloat(item.channelNumber));
                 // channels without a number in tvheadend are numbered after the highest channel number
-                let nextFreeNumber =
-                    channelNumbers.reduce((max, number) => (number > max ? number : max), 0) || 0;
+                let nextFreeNumber = channelNumbers.reduce((max, number) => (number > max ? number : max), 0) || 0;
                 parserResult.items.forEach((item, index) => {
                     let channelNumber = channelNumbers[index];
                     if (!(channelNumber > 0)) {
@@ -576,10 +575,11 @@ export default class TVHDataService {
      * Find out why a stream can't be played: request it like the video element does (without
      * credentials) and translate the answer of tvheadend. Fatal problems won't go away by retrying.
      */
-    async diagnoseStream(url: URL): Promise<{ message: string; isFatal: boolean }> {
+    async diagnoseStream(url: URL): Promise<{ message: string; isFatal: boolean; isAccessible?: boolean }> {
         try {
             await this.retrieveTest(url, false);
             return {
+                isAccessible: true,
                 message: t(
                     'TVHeadend gives access to the channel, but it could not be started (no free tuner, no signal, encrypted channel or format not supported by the TV).'
                 ),
@@ -601,7 +601,10 @@ export default class TVHDataService {
                         isFatal: true
                     };
                 case 404:
-                    return { message: t('TVHeadend does not know this channel anymore, reload the channels.'), isFatal: true };
+                    return {
+                        message: t('TVHeadend does not know this channel anymore, reload the channels.'),
+                        isFatal: true
+                    };
                 case 503:
                     return { message: t('TVHeadend has no free tuner for this channel.'), isFatal: false };
                 default:

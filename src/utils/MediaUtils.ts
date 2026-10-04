@@ -32,6 +32,41 @@ export default class MediaUtils {
     }
 
     /**
+     * Check whether the app can read the stream itself (needed to decode it without the video element).
+     * Reads the first bytes and stops, resolves false on any problem (e.g. cross origin restrictions).
+     */
+    static canReadStreamDirectly(url: URL, timeoutMillis = 5000): Promise<boolean> {
+        return new Promise<boolean>((resolve) => {
+            if (typeof fetch === 'undefined' || typeof AbortController === 'undefined') {
+                resolve(false);
+                return;
+            }
+            const controller = new AbortController();
+            const timeout = setTimeout(() => {
+                controller.abort();
+                resolve(false);
+            }, timeoutMillis);
+            fetch(url.toString(), { signal: controller.signal })
+                .then((response) => {
+                    if (!response.ok || !response.body) {
+                        throw new Error('status ' + response.status);
+                    }
+                    return response.body.getReader().read();
+                })
+                .then((chunk) => {
+                    clearTimeout(timeout);
+                    controller.abort();
+                    resolve(!!chunk.value && chunk.value.length > 0);
+                })
+                .catch((error) => {
+                    console.log('stream can not be read directly:', error && error.message);
+                    clearTimeout(timeout);
+                    resolve(false);
+                });
+        });
+    }
+
+    /**
      * Returns a copy of the stream url that requests the given tvheadend streaming profile
      */
     static withProfile(url: URL, profile: string): URL {

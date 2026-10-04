@@ -251,27 +251,63 @@ const TV = () => {
     /**
      * the tv could not play the second video, close it and make sure the main video keeps running
      */
-    const handlePipFailed = (reason: string) => {
+    const handlePipFailed = (reason: string, streamUrl?: URL) => {
         console.log('picture in picture failed:', reason);
         restartAfterPipFailure.current = true;
         setPipChannelPosition(null);
 
-        let reasonText;
+        const lowResolutionHint = pipSettings.profile
+            ? ''
+            : ' ' + t('Try a low resolution streaming profile for picture in picture in the setup.');
         if (reason === 'timeout') {
-            reasonText = t('the second video did not start within {0} s', PIP_START_TIMEOUT_MILLIS / 1000);
-        } else if (reason === 'main video interrupted') {
-            reasonText = t('the second video stopped the main video');
-        } else if (reason === 'rejected') {
-            reasonText = t('the TV rejected the second video');
-        } else {
-            reasonText = t('the TV rejected the second video ({0})', reason);
+            const reasonText = t('the second video did not start within {0} s', PIP_START_TIMEOUT_MILLIS / 1000);
+            showMessage(
+                t('Picture in picture could not be started: {0}.', reasonText) + lowResolutionHint,
+                PIP_FAILURE_MESSAGE_MILLIS
+            );
+            return;
         }
-        let text = t('Picture in picture could not be started: {0}.', reasonText);
-        if (!pipSettings.profile) {
-            // a low resolution stream needs much less of the decoder
-            text += ' ' + t('Try a low resolution streaming profile for picture in picture in the setup.');
+        if (reason === 'main video interrupted') {
+            const reasonText = t('the second video stopped the main video');
+            showMessage(
+                t('Picture in picture could not be started: {0}.', reasonText) + lowResolutionHint,
+                PIP_FAILURE_MESSAGE_MILLIS
+            );
+            return;
         }
-        showMessage(text, PIP_FAILURE_MESSAGE_MILLIS);
+
+        // the video element only tells that it gave up, ask tvheadend whether it delivers the stream
+        const reasonCode = reason === 'rejected' ? '' : ' (' + reason + ')';
+        if (!tvhDataService || !streamUrl) {
+            showMessage(
+                t('Picture in picture could not be started: {0}.', t('the TV rejected the second video') + reasonCode),
+                PIP_FAILURE_MESSAGE_MILLIS
+            );
+            return;
+        }
+        showMessage(t('Checking why picture in picture could not be started...'), PIP_FAILURE_MESSAGE_MILLIS);
+        tvhDataService.diagnoseStream(streamUrl).then((diagnosis) => {
+            if (diagnosis.isAccessible) {
+                // tvheadend delivers the stream, so it's the tv that can't play a second video.
+                // Also find out whether the app could read the stream itself (to decode it without the video element)
+                MediaUtils.canReadStreamDirectly(streamUrl).then((canRead) => {
+                    showMessage(
+                        t(
+                            'TVHeadend delivers the picture in picture stream, but this TV does not play a second video at the same time{0}.',
+                            reasonCode
+                        ) +
+                            ' ' +
+                            t('Direct access to the stream: {0}.', canRead ? t('yes') : t('no')),
+                        PIP_FAILURE_MESSAGE_MILLIS
+                    );
+                });
+            } else {
+                showMessage(
+                    t('TVHeadend refused the picture in picture stream: {0}', diagnosis.message),
+                    PIP_FAILURE_MESSAGE_MILLIS
+                );
+            }
+        });
     };
 
     /**
