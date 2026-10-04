@@ -1,0 +1,44 @@
+name: CI
+
+on:
+    push:
+    pull_request:
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            # react-scripts 4 (webpack 4) doesn't build with the OpenSSL 3 of newer node versions
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 16
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Lint
+              run: npm run lint
+
+            - name: Typecheck
+              run: npm run typecheck
+
+            - name: Unit tests
+              run: npm test -- --watchAll=false
+              env:
+                  CI: true
+
+            # third party warnings (ilib) would fail the build with CI=true
+            - name: Build
+              run: npm run build
+              env:
+                  CI: false
+
+            - name: Package webOS app
+              run: npx -y -p @webos-tools/cli ares-package build service -o dist
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: webos-tvheadend-ipk
+                  path: dist/*.ipk

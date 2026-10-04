@@ -21,7 +21,9 @@
         "webos:tv": "npm run build && ares-package build service && ares-install com.willinux.tvh.app_${npm_package_version}_all.ipk -d tv && ares-launch com.willinux.tvh.app -d tv",
         "webos:tv-rm": "ares-install -d tv --remove com.willinux.tvh.app",
         "inspect:emu": "ares-inspect -d emulator com.willinux.tvh.app --open",
-        "inspect:tv": "ares-inspect -d tv com.willinux.tvh.app --open"
+        "inspect:tv": "ares-inspect -d tv com.willinux.tvh.app --open",
+        "lint": "eslint --ext .ts,.tsx src",
+        "typecheck": "tsc --noEmit -p ."
     },
     "eslintConfig": {
         "extends": [
@@ -30,9 +32,7 @@
     },
     "browserslist": {
         "production": [
-            ">0.2%",
-            "not dead",
-            "not op_mini all"
+            "chrome >= 38"
         ],
         "development": [
             "last 1 chrome version",
@@ -41,6 +41,7 @@
         ]
     },
     "devDependencies": {
+        "@types/jest": "^26.0.24",
         "@types/react": "^17.0.0",
         "@types/react-dom": "^17.0.0",
         "@typescript-eslint/eslint-plugin": "^4.14.0",
@@ -50,6 +51,7 @@
         "eslint-config-react-app": "^6.0.0",
         "eslint-plugin-prettier": "^3.3.1",
         "eslint-plugin-react": "^7.22.0",
-        "prettier": "^2.2.1"
+        "prettier": "^2.2.1",
+        "typescript": "^3.9.7"
     }
 }
