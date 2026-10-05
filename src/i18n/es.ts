@@ -27,8 +27,6 @@ const es: { [text: string]: string } = {
     Off: 'Desactivados',
     'start {0} s': 'inicio {0} s',
     'buffer {0} s': 'búfer {0} s',
-    'fast player': 'reproductor rápido',
-    'native player': 'reproductor nativo',
     'Track {0}': 'Pista {0}',
 
     'TVHeadend gives access to the channel, but it could not be started (no free tuner, no signal, encrypted channel or format not supported by the TV).':
@@ -64,7 +62,6 @@ const es: { [text: string]: string } = {
     'User (Optional)': 'Usuario (opcional)',
     'Password (Optional)': 'Contraseña (opcional)',
     Connect: 'Conectar',
-    'Fast channel start (experimental)': 'Arranque rápido de canales (experimental)',
     'Some checks failed, the settings can be saved anyway.':
         'Alguna comprobación ha fallado, pero puedes guardar los ajustes igualmente.',
     'A copy of the settings is kept outside of the app as soon as they are saved.':

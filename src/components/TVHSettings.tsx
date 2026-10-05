@@ -11,7 +11,6 @@ import TestResult from './TestResult';
 import StorageHelper from '../utils/StorageHelper';
 import { t } from '../i18n/I18n';
 import BodyText from '@enact/moonstone/BodyText';
-import SwitchItem from '@enact/moonstone/SwitchItem';
 
 const TVHSettings = (props: { unmount: () => void }) => {
     const { tvhDataService, setTvhDataService } = useContext(AppContext);
@@ -26,7 +25,6 @@ const TVHSettings = (props: { unmount: () => void }) => {
         dvrUuid: 0
     });
     const [backupInfo, setBackupInfo] = useState('');
-    const [isFastPlayerEnabled, setFastPlayerEnabled] = useState(StorageHelper.isFastPlayerEnabled());
     const tvhSettingsWrapper = useRef<HTMLDivElement>(null);
 
     const focus = () => tvhSettingsWrapper.current?.focus();
@@ -34,7 +32,6 @@ const TVHSettings = (props: { unmount: () => void }) => {
     const handleSave = () => {
         // put to storage
         StorageHelper.setTvhSettings(serviceParms);
-        StorageHelper.setFastPlayerEnabled(isFastPlayerEnabled);
         // keep a copy outside of the app right away, so it survives uninstalling the app
         StorageHelper.writeBackupNow();
         setTvhDataService(new TVHDataService(serviceParms));
@@ -152,9 +149,6 @@ const TVHSettings = (props: { unmount: () => void }) => {
                     onChange={handlePasswordChange}
                     placeholder={t('Password (Optional)')}
                 />
-                <SwitchItem selected={isFastPlayerEnabled} onToggle={() => setFastPlayerEnabled(!isFastPlayerEnabled)}>
-                    {t('Fast channel start (experimental)')}
-                </SwitchItem>
                 <br /> <br />
                 {!isLoading && (
                     <Button
