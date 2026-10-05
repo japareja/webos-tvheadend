@@ -5,6 +5,7 @@ const STORAGE_KEY_LAST_CHANNEL = 'lastChannel';
 const STORAGE_KEY_CHANNEL_GROUP = 'channelGroup';
 const STORAGE_KEY_FAVORITES = 'favoriteChannels';
 const STORAGE_KEY_TEXT_TRACK_PREFIX = 'textTrack:';
+const STORAGE_KEY_FAST_PLAYER = 'fastPlayer';
 
 type BackupWriter = (settings: { [key: string]: string }) => Promise<unknown>;
 
@@ -71,6 +72,16 @@ export default class StorageHelper {
 
     static setTvhSettings = (settings: TVHDataServiceParms) => {
         localStorage.setItem(STORAGE_TVH_SETTING_KEY, JSON.stringify(settings));
+        StorageHelper.scheduleBackup();
+    };
+
+    /** experimental player with a short start time (mpegts.js), off by default */
+    static isFastPlayerEnabled = (): boolean => {
+        return localStorage.getItem(STORAGE_KEY_FAST_PLAYER) === 'true';
+    };
+
+    static setFastPlayerEnabled = (enabled: boolean) => {
+        localStorage.setItem(STORAGE_KEY_FAST_PLAYER, enabled ? 'true' : 'false');
         StorageHelper.scheduleBackup();
     };
 

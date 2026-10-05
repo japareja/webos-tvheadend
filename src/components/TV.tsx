@@ -13,6 +13,7 @@ import Spinner from '@enact/moonstone/Spinner';
 import { Panel } from '@enact/moonstone/Panels';
 import { AppViewState } from '../App';
 import MediaUtils from '../utils/MediaUtils';
+import FastPlayer from '../utils/FastPlayer';
 import { getLanguage, t } from '../i18n/I18n';
 
 // if channels are switched faster than this, only the last selected channel gets started
@@ -64,6 +65,10 @@ const TV = () => {
     // the channel shown before the current one, for the back and the left button
     const previousChannelPosition = useRef<number | null>(null);
     const shownChannelPosition = useRef<number | null>(null);
+    // experimental player with a short start time, channels it can't play use the native player
+    const [isFastPlayerEnabled] = useState(StorageHelper.isFastPlayerEnabled() && FastPlayer.isSupported());
+    const fastPlayer = useRef<FastPlayer | null>(null);
+    const fastPlayerFailedChannels = useRef(new Set<string>());
     const audioTracksRef = useRef<AudioTrackList>();
     const textTracksRef = useRef<TextTrackList>();
 
@@ -339,6 +344,7 @@ const TV = () => {
         const videoElement = getMediaElement();
         const bufferedAhead = videoElement && isVideoPlaying ? MediaUtils.getBufferedAhead(videoElement) : undefined;
         bufferedAhead !== undefined && parts.push(t('buffer {0} s', formatSeconds(bufferedAhead)));
+        isFastPlayerEnabled && parts.push(fastPlayer.current ? t('fast player') : t('native player'));
         return parts.join(' · ');
     };
 
@@ -376,6 +382,10 @@ const TV = () => {
         cancelPendingStreamStart();
         clearStallTimeout();
         clearReconnect();
+        if (fastPlayer.current) {
+            fastPlayer.current.destroy();
+            fastPlayer.current = null;
+        }
         setAudioTracks(undefined);
         setTextTracks(undefined);
         setVideoQuality('');
@@ -447,10 +457,54 @@ const TV = () => {
         setIsVideoPlaying(true);
     };
 
+    /**
+     * the fast player can't play this channel: remember it for this session and use the native player
+     */
+    const fallbackToNativePlayer = (player: FastPlayer, reason: string) => {
+        // ignore late reports of a player that was already replaced
+        if (fastPlayer.current !== player) return;
+        console.log('channel %s falls back to the native player: %s', player.channelUuid, reason);
+        fastPlayerFailedChannels.current.add(player.channelUuid);
+        const videoElement = getMediaElement();
+        if (!videoElement) return;
+        resetPlayer(videoElement);
+        setIsVideoPlaying(false);
+        startSource(videoElement, player.url);
+    };
+
+    const handleVideoError = () => {
+        if (fastPlayer.current) {
+            fastPlayer.current.reportError('video error ' + (getMediaElement()?.error?.code || '?'));
+        } else {
+            scheduleReconnect('video error');
+        }
+    };
+
     const startSource = (videoElement: HTMLVideoElement, dataUrl: URL) => {
         timeoutStartStream.current = null;
         streamRequestedAt.current = Date.now();
         startupMillis.current = undefined;
+
+        const channel = getCurrentChannel();
+        if (isFastPlayerEnabled && channel && !fastPlayerFailedChannels.current.has(channel.getUUID())) {
+            const player: FastPlayer = new FastPlayer(dataUrl, channel.getUUID(), (reason) =>
+                fallbackToNativePlayer(player, reason)
+            );
+            fastPlayer.current = player;
+            try {
+                player.start(videoElement);
+                // the stream has to start within the stall timeout
+                startStallTimeout();
+                return;
+            } catch (error) {
+                console.log('fast player could not be started, using the native player', error);
+                fastPlayerFailedChannels.current.add(channel.getUUID());
+                fastPlayer.current = null;
+                player.destroy();
+                MediaUtils.resetVideoElement(videoElement);
+            }
+        }
+
         const lastSource = MediaUtils.attachSource(videoElement, dataUrl);
         // fired if none of the sources could be played
         lastSource.addEventListener('error', () => {
@@ -657,7 +711,7 @@ const TV = () => {
                 onLoadedMetadata={handleLoadedMetaData}
                 onPlaying={handleVideoPlaying}
                 onWaiting={startStallTimeout}
-                onError={() => scheduleReconnect('video error')}
+                onError={handleVideoError}
                 onEnded={() => scheduleReconnect('stream ended')}
             ></video>
         </div>
