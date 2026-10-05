@@ -1,4 +1,4 @@
-import EPGData, { GROUP_ALL, GROUP_FAVORITES } from '../models/EPGData';
+import EPGData, { FAILED_CHANNEL_MILLIS, GROUP_ALL, GROUP_FAVORITES } from '../models/EPGData';
 import EPGChannel from '../models/EPGChannel';
 import EPGEvent from '../models/EPGEvent';
 
@@ -55,6 +55,48 @@ describe('EPGData groups', () => {
     it('finds channels by their number', () => {
         expect(epgData.getChannelPositionByNumber(3)).toBe(2);
         expect(epgData.getChannelPositionByNumber(99)).toBe(-1);
+    });
+
+    it('counts the channels of a group', () => {
+        expect(epgData.getGroupChannelCount(GROUP_ALL)).toBe(3);
+        expect(epgData.getGroupChannelCount('sat')).toBe(2);
+        expect(epgData.getGroupChannelCount('empty')).toBe(0);
+    });
+});
+
+describe('EPGData failed channels', () => {
+    let epgData: EPGData;
+    let now: number;
+
+    beforeEach(() => {
+        localStorage.clear();
+        now = 1000000000000;
+        jest.spyOn(Date, 'now').mockImplementation(() => now);
+        epgData = new EPGData();
+        epgData.updateChannels([createChannel(1), createChannel(2)]);
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('remembers failed channels across restarts', () => {
+        const channel = epgData.getChannel(0) as EPGChannel;
+        epgData.markChannelFailed(channel);
+        expect(epgData.isChannelFailed(channel)).toBe(true);
+        expect(epgData.getView().isFailed(0)).toBe(true);
+        expect(epgData.getView().isFailed(1)).toBe(false);
+        expect(new EPGData().isChannelFailed(channel)).toBe(true);
+    });
+
+    it('forgets failures after a while or when the channel plays again', () => {
+        const first = epgData.getChannel(0) as EPGChannel;
+        const second = epgData.getChannel(1) as EPGChannel;
+        epgData.markChannelFailed(first);
+        epgData.markChannelFailed(second);
+        epgData.clearChannelFailed(second);
+        expect(epgData.isChannelFailed(second)).toBe(false);
+
+        now += FAILED_CHANNEL_MILLIS;
+        expect(epgData.isChannelFailed(first)).toBe(false);
     });
 });
 

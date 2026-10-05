@@ -6,6 +6,8 @@ import { t } from '../i18n/I18n';
 
 export const GROUP_ALL = 'all';
 export const GROUP_FAVORITES = 'favorites';
+// a channel that could not be played is marked for this time
+export const FAILED_CHANNEL_MILLIS = 60 * 60 * 1000;
 
 export interface ChannelGroup {
     id: string;
@@ -21,6 +23,8 @@ export default class EPGData {
     // tvheadend channel tags that are used by at least one channel
     private tags: ChannelGroup[] = [];
     private favorites = new Set<string>(StorageHelper.getFavorites());
+    // channels that could not be played recently (uuid -> time), e.g. offline acestream channels
+    private failedChannels = StorageHelper.getFailedChannels();
     private currentGroupId = StorageHelper.getChannelGroup() || GROUP_ALL;
     private view?: EPGDataView;
 
@@ -176,6 +180,13 @@ export default class EPGData {
         return this.getCurrentGroup();
     }
 
+    /**
+     * number of channels of a group, e.g. for the group selection
+     */
+    getGroupChannelCount(groupId: string) {
+        return this.getGroupPositions(groupId).length;
+    }
+
     private getGroupPositions(groupId: string): number[] {
         const positions: number[] = [];
         this.channels.forEach((channel, position) => {
@@ -217,6 +228,36 @@ export default class EPGData {
         this.favorites.forEach((favorite) => favorites.push(favorite));
         StorageHelper.setFavorites(favorites);
         this.view = undefined;
+    }
+
+    /**
+     * true if the channel could not be played within the last FAILED_CHANNEL_MILLIS
+     */
+    isChannelFailed(channel: EPGChannel) {
+        const failedAt = this.failedChannels[channel.getUUID()];
+        return failedAt !== undefined && Date.now() - failedAt < FAILED_CHANNEL_MILLIS;
+    }
+
+    markChannelFailed(channel: EPGChannel) {
+        this.failedChannels[channel.getUUID()] = Date.now();
+        this.storeFailedChannels();
+    }
+
+    clearChannelFailed(channel: EPGChannel) {
+        if (this.failedChannels[channel.getUUID()] === undefined) return;
+        delete this.failedChannels[channel.getUUID()];
+        this.storeFailedChannels();
+    }
+
+    private storeFailedChannels() {
+        // forget old failures, so the stored list stays small
+        const now = Date.now();
+        Object.keys(this.failedChannels).forEach((uuid) => {
+            if (now - this.failedChannels[uuid] >= FAILED_CHANNEL_MILLIS) {
+                delete this.failedChannels[uuid];
+            }
+        });
+        StorageHelper.setFailedChannels(this.failedChannels);
     }
 
     /**

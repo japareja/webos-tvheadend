@@ -9,6 +9,7 @@ import EPGChannel from './models/EPGChannel';
 import StorageHelper from './utils/StorageHelper';
 import Menu, { MenuItem } from './components/Menu';
 import Search from './components/Search';
+import ServerStatus from './components/ServerStatus';
 import Config from './config/Config';
 import { setLocale as setI18nLocale, t } from './i18n/I18n';
 
@@ -21,7 +22,8 @@ export enum AppViewState {
     RECORDINGS,
     HELP,
     CONTACT,
-    SEARCH
+    SEARCH,
+    STATUS
 }
 
 const App = () => {
@@ -63,6 +65,12 @@ const App = () => {
             label: t('Recordings'),
             action: () => updateAppViewState(AppViewState.RECORDINGS),
             isActive: appViewState === AppViewState.RECORDINGS
+        },
+        {
+            icon: 'info',
+            label: t('Server status'),
+            action: () => updateAppViewState(AppViewState.STATUS),
+            isActive: appViewState === AppViewState.STATUS
         },
         {
             icon: 'gear',
@@ -337,6 +345,7 @@ const App = () => {
             {appViewState === AppViewState.TV && isChannelsRetrieved && <TV />}
             {appViewState === AppViewState.RECORDINGS && <Player />}
             {appViewState === AppViewState.SEARCH && <Search unmount={() => setAppViewState(AppViewState.TV)} />}
+            {appViewState === AppViewState.STATUS && <ServerStatus unmount={() => setAppViewState(AppViewState.TV)} />}
         </div>
     );
 };

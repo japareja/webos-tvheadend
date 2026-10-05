@@ -339,3 +339,132 @@ body {
     background-color: rgba(5, 16, 24, 0.9);
     border-left: 6px solid #ef3343;
 }
+
+/* hint at the right of the channel list footer */
+.footerHint {
+    float: right;
+}
+
+/* all channel groups to jump directly to one (long press yellow or left in the channel list) */
+.groupPicker {
+    position: absolute;
+    top: 80px;
+    left: 150px;
+    width: 600px;
+    max-height: 860px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    background-color: rgba(5, 16, 24, 0.97);
+    border: 2px solid rgba(29, 170, 226, 1);
+    outline: none;
+    z-index: 10;
+}
+
+.groupPickerTitle {
+    padding: 15px 25px;
+    font-size: 30px;
+    font-weight: bold;
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.groupPickerList {
+    overflow-y: auto;
+}
+
+.groupPickerItem {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 25px;
+    font-size: 28px;
+    color: #cccccc;
+}
+
+.groupPickerItem.current {
+    color: #fbc821;
+}
+
+.groupPickerItem.focused {
+    color: #ffffff;
+    background-color: rgba(29, 170, 226, 0.8);
+}
+
+.groupPickerCount {
+    margin-left: 20px;
+    opacity: 0.7;
+}
+
+/* server status screen */
+.serverStatus {
+    background-color: rgba(11, 39, 58, 0.97);
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    outline: none;
+}
+
+.serverStatusBody {
+    height: 820px;
+    overflow-y: auto;
+}
+
+.statusSectionTitle {
+    margin: 25px 0 10px;
+    font-size: 30px;
+    font-weight: bold;
+    color: rgba(29, 170, 226, 1);
+}
+
+.statusTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 24px;
+    color: #cccccc;
+}
+
+.statusTable th {
+    text-align: left;
+    padding: 8px 12px;
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.statusTable td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.statusTable .statusErrors,
+.statusError {
+    color: #ff6b6b;
+}
+
+.statusSignal {
+    white-space: nowrap;
+}
+
+.statusSignalBar {
+    display: inline-block;
+    width: 80px;
+    height: 12px;
+    margin-right: 10px;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.statusSignalLevel {
+    display: block;
+    height: 100%;
+    background-color: #4caf50;
+}
+
+.statusSignalLevel.medium {
+    background-color: #fbc821;
+}
+
+.statusSignalLevel.weak {
+    background-color: #e53935;
+}

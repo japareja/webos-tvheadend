@@ -57,6 +57,9 @@ ares-inspect -d tv com.willinux.tvh.app --open
 - Search for programs in the EPG
 - Back to the previous channel
 - Automatic reconnect if a stream fails or stalls
+- Channels that could not be played in the last hour are dimmed and marked in the channel list and the EPG, P+/P- skips them
+- Server status (menu): tuners in use with signal, SNR, bitrate and errors, and the active streams
+  (needs a tvheadend user with admin rights)
 - Video quality (UHD/HD/SD and resolution) in the channel info
 - Audio track and subtitle selection
 - Record live tv or plan recordings using EPG
@@ -68,17 +71,19 @@ ares-inspect -d tv com.willinux.tvh.app --open
 
 ## Remote control
 Live tv:
-* **P+ / P-**: next/previous channel of the selected channel group
+* **P+ / P-**: next/previous channel of the selected channel group (channels that failed recently are skipped)
 * **0-9**: channel number (up to 4 digits)
 * **Back**: hide the overlays, if nothing is shown go back to the previous channel
 * **Up / Down**: channel list
 * **OK**: channel info
-* **Red**: record, **Green**: menu (TV, search, recordings, setup), **Yellow**: audio/subtitles, **Blue**: EPG
+* **Red**: record, **Green**: menu (TV, search, recordings, server status, setup), **Yellow**: audio/subtitles, **Blue**: EPG
 * **Right**: EPG (the Magic Remote has no physical color buttons)
 * **Left**: back to the previous channel, also while the channel info is shown
 
 Channel list:
-* **Yellow**: next channel group, **Blue**: add/remove favorite, **Right/Left**: program details
+* **Yellow**: next channel group, hold it to choose from the list of all groups
+* **Blue**: add/remove favorite, **Right/Left**: program details
+* **Left** (without program details): list of all groups
 
 EPG:
 * **Yellow**: next channel group

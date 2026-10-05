@@ -88,4 +88,10 @@ export default class EPGDataView {
         const channel = this.getChannel(row);
         return !!channel && this.epgData.isFavorite(channel);
     }
+
+    /** the channel could not be played recently */
+    isFailed(row: number) {
+        const channel = this.getChannel(row);
+        return !!channel && this.epgData.isChannelFailed(channel);
+    }
 }

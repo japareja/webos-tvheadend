@@ -8,8 +8,11 @@ import EPGEvent from '../models/EPGEvent';
 import EPGChannel from '../models/EPGChannel';
 import EPGUtils from '../utils/EPGUtils';
 import { t } from '../i18n/I18n';
+import GroupPicker from './GroupPicker';
 
 const VERTICAL_SCROLL_TOP_PADDING_ITEM = 5;
+// holding the yellow button this long opens the list of all groups
+const LONG_PRESS_MILLIS = 600;
 const IS_DEBUG = false;
 
 enum State {
@@ -55,6 +58,12 @@ const ChannelList = (props: {
     const [state, setState] = useState<State>(State.NORMAL);
     const [detailsState, setDetailsState] = useState<DetailsState>();
     const [groupName, setGroupName] = useState(epgData.getCurrentGroup().name);
+    const [isGroupPickerOpen, setGroupPickerOpen] = useState(false);
+    // the button that opened the picker and is still held
+    const [pickerHeldKeys, setPickerHeldKeys] = useState<number[]>([]);
+    // short press of the yellow button: next group, long press: list of all groups
+    const isYellowPressed = useRef(false);
+    const yellowLongPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const getTopFrom = (position: number) => {
         const y = position * mChannelLayoutHeight; //+ this.mChannelLayoutMargin;
@@ -186,6 +195,10 @@ const ChannelList = (props: {
             canvas.fillRect(drawingRect.left, drawingRect.top, drawingRect.width, drawingRect.height);
         }
 
+        // channels that could not be played recently are dimmed
+        const isFailed = view.current.isFailed(position);
+        canvas.globalAlpha = isFailed ? 0.45 : 1.0;
+
         // channel number, long channel numbers get a smaller font
         const channelNumberText = channel.getChannelID().toString();
         CanvasUtils.writeText(canvas, channelNumberText, drawingRect.left + 75, drawingRect.middle, {
@@ -213,6 +226,11 @@ const ChannelList = (props: {
         // favorite mark
         if (view.current.isFavorite(position)) {
             drawStar(canvas, drawingRect.left + 90 + 11, drawingRect.top + mChannelLayoutHeight * 0.33, 11);
+            drawingRect.left += 22 + mChannelLayoutPadding;
+        }
+        // failed mark
+        if (isFailed) {
+            drawFailedMark(canvas, drawingRect.left + 90 + 11, drawingRect.top + mChannelLayoutHeight * 0.33, 11);
             drawingRect.left += 22 + mChannelLayoutPadding;
         }
         // channel name
@@ -282,6 +300,27 @@ const ChannelList = (props: {
             );
             IS_DEBUG && CanvasUtils.drawDebugRect(canvas, channelImageRect);
         }
+        canvas.globalAlpha = 1.0;
+    };
+
+    /**
+     * red circle with an exclamation mark for channels that could not be played recently
+     */
+    const drawFailedMark = (canvas: CanvasRenderingContext2D, centerX: number, centerY: number, radius: number) => {
+        const alpha = canvas.globalAlpha;
+        // the mark itself is not dimmed
+        canvas.globalAlpha = 1.0;
+        canvas.fillStyle = '#EF3343';
+        canvas.beginPath();
+        canvas.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        canvas.fill();
+        CanvasUtils.writeText(canvas, '!', centerX, centerY + 1, {
+            fontSize: radius * 2 - 2,
+            fillStyle: '#ffffff',
+            textAlign: 'center',
+            isBold: true
+        });
+        canvas.globalAlpha = alpha;
     };
 
     const drawStar = (canvas: CanvasRenderingContext2D, centerX: number, centerY: number, radius: number) => {
@@ -401,10 +440,20 @@ const ChannelList = (props: {
                 selectFocusedChannel();
                 props.unmount();
                 break;
-            case 405: // yellow button -> next channel group
+            case 405: // yellow button -> next channel group, held -> list of all groups
             case 89: // keyboard 'y'
                 event.stopPropagation();
-                changeGroup();
+                // the key repeats while it is held, only the first press counts
+                if (!isYellowPressed.current) {
+                    isYellowPressed.current = true;
+                    yellowLongPressTimeout.current = setTimeout(() => {
+                        // long press: the picker gets the release of the still held button
+                        yellowLongPressTimeout.current = null;
+                        isYellowPressed.current = false;
+                        setPickerHeldKeys([keyCode]);
+                        setGroupPickerOpen(true);
+                    }, LONG_PRESS_MILLIS);
+                }
                 break;
             case 406: // blue button -> add/remove favorite
             case 70: // keyboard 'f'
@@ -435,9 +484,13 @@ const ChannelList = (props: {
                     // switch to previous event details
                     focusedEventOffset.current -= 1;
                     setDetailsData();
-                } else {
+                } else if (state === State.DETAILS) {
                     // hide channelListDetails
                     setState(State.NORMAL);
+                } else {
+                    // list of all groups (the magic remote has no physical yellow button to hold)
+                    setPickerHeldKeys([keyCode]);
+                    setGroupPickerOpen(true);
                 }
                 break;
             default:
@@ -448,10 +501,44 @@ const ChannelList = (props: {
         if (!event.isPropagationStopped()) return event;
     };
 
+    const handleKeyUp = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if ((event.keyCode === 405 || event.keyCode === 89) && isYellowPressed.current) {
+            event.stopPropagation();
+            isYellowPressed.current = false;
+            // released before the long press time -> short press
+            if (yellowLongPressTimeout.current) {
+                clearTimeout(yellowLongPressTimeout.current);
+                yellowLongPressTimeout.current = null;
+                changeGroup();
+            }
+        }
+    };
+
+    const selectGroup = (groupId: string) => {
+        setGroupPickerOpen(false);
+        epgData.setCurrentGroup(groupId);
+        updateView();
+        focus();
+    };
+
+    const closeGroupPicker = () => {
+        setGroupPickerOpen(false);
+        focus();
+    };
+
+    /**
+     * all groups with channels, for the group picker
+     */
+    const getPickerGroups = () =>
+        epgData
+            .getGroups()
+            .map((group) => ({ id: group.id, name: group.name, channelCount: epgData.getGroupChannelCount(group.id) }))
+            .filter((group) => group.channelCount > 0);
+
     const toggleRecording = () => {
         const epgEvent =
             detailsState?.focusedEvent ||
-            epgData
+            view.current
                 .getChannel(channelPosition.current)
                 ?.getEvents()
                 .find((e) => e.isCurrent());
@@ -595,6 +682,7 @@ const ChannelList = (props: {
         return () => {
             // stop animation when unmounting
             cancelAnimationFrame(scrollAnimationId.current);
+            yellowLongPressTimeout.current && clearTimeout(yellowLongPressTimeout.current);
         };
     }, []);
 
@@ -610,6 +698,7 @@ const ChannelList = (props: {
             ref={listWrapper}
             tabIndex={-1}
             onKeyDown={handleKeyPress}
+            onKeyUp={handleKeyUp}
             onWheel={handleScrollWheel}
             onClick={handleClick}
             className="channelList"
@@ -621,7 +710,18 @@ const ChannelList = (props: {
                 {t('Group')}: {groupName}
                 <span className="colorKey blue"></span>
                 {t('Favorite')}
+                <span className="footerHint">&#9664; {t('All groups')}</span>
             </div>
+
+            {isGroupPickerOpen && (
+                <GroupPicker
+                    groups={getPickerGroups()}
+                    currentGroupId={epgData.getCurrentGroup().id}
+                    onSelect={selectGroup}
+                    onClose={closeGroupPicker}
+                    heldKeys={pickerHeldKeys}
+                />
+            )}
 
             {state === State.DETAILS && (
                 <ChannelListDetails

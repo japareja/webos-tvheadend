@@ -46,6 +46,50 @@ interface TVHChannelGrid {
     entries: { uuid: string; tags?: string[] }[];
 }
 
+/** a tuner (input) with an active stream, see api/status/inputs */
+export interface TVHInputStatus {
+    uuid: string;
+    input: string;
+    stream: string;
+    subs: number;
+    weight: number;
+    // signal and snr: scale 1 = relative (0..65535), scale 2 = 0.001 dBm / dB, otherwise unknown
+    signal: number;
+    signal_scale: number;
+    snr: number;
+    snr_scale: number;
+    ber: number;
+    unc: number;
+    // bits per second
+    bps: number;
+    cc: number;
+    te: number;
+}
+
+/** a running subscription, see api/status/subscriptions */
+export interface TVHSubscriptionStatus {
+    id: number;
+    start: number;
+    errors: number;
+    state: string;
+    hostname?: string;
+    username?: string;
+    client?: string;
+    title?: string;
+    channel?: string;
+    service?: string;
+    profile?: string;
+    descramble?: string;
+    // bytes per second
+    in: number;
+    out: number;
+}
+
+interface TVHStatusList<T> {
+    entries: T[];
+    totalCount: number;
+}
+
 interface TVHRecordings<T extends EPGChannelRecordingKind> {
     entries: TVHRecordingEntryEx<T>[];
     total: number;
@@ -102,6 +146,9 @@ export default class TVHDataService {
     static EPG_MAX_ENTRIES = 60000;
     static API_CHANNEL_TAGS = 'api/channeltag/list';
     static API_CHANNEL_GRID = 'api/channel/grid?limit=100000';
+    // need a tvheadend user with admin rights
+    static API_STATUS_INPUTS = 'api/status/inputs';
+    static API_STATUS_SUBSCRIPTIONS = 'api/status/subscriptions';
     static API_EPG = 'api/epg/events/grid?dir=ASC&sort=start&limit=' + TVHDataService.EPG_PAGE_SIZE + '&start=';
     static API_DVR_CONFIG = 'api/dvr/config/grid';
     static API_DVR_CREATE_BY_EVENT = 'api/dvr/entry/create_by_event?';
@@ -228,6 +275,25 @@ export default class TVHDataService {
     /**
      * retrieve tvh server info
      */
+    /**
+     * tuners in use and running subscriptions (needs admin rights in tvheadend)
+     */
+    async retrieveServerStatus() {
+        const [inputs, subscriptions] = await Promise.all([
+            this.httpProxyServiceAdapter.call<TVHStatusList<TVHInputStatus>>({
+                url: this.url + TVHDataService.API_STATUS_INPUTS,
+                user: this.user,
+                password: this.password
+            }),
+            this.httpProxyServiceAdapter.call<TVHStatusList<TVHSubscriptionStatus>>({
+                url: this.url + TVHDataService.API_STATUS_SUBSCRIPTIONS,
+                user: this.user,
+                password: this.password
+            })
+        ]);
+        return { inputs: inputs.entries || [], subscriptions: subscriptions.entries || [] };
+    }
+
     async retrieveServerInfo(): Promise<TVHServerInfo> {
         // now create rec by event
         return await this.httpProxyServiceAdapter.call<TVHServerInfo>({

@@ -5,6 +5,7 @@ const es: { [text: string]: string } = {
     // menu
     TV: 'TV',
     Search: 'Buscar',
+    'Server status': 'Estado del servidor',
     Recordings: 'Grabaciones',
     Setup: 'Ajustes',
     Help: 'Ayuda',
@@ -93,7 +94,31 @@ const es: { [text: string]: string } = {
     'Using Version 4.3 with User Authentication requires activation of "Persistence Token" in the Users Password setttings of TVHeadend':
         'Con la versión 4.3 y usuario hay que activar "Persistent authentication" en la contraseña del usuario en TVHeadend',
     'App user needs TVHeadend "Web" privileges to handle EPG, DVR and version specific handling':
-        'El usuario de la app necesita el permiso "Web interface" de TVHeadend para la guía, las grabaciones y la detección de versión'
+        'El usuario de la app necesita el permiso "Web interface" de TVHeadend para la guía, las grabaciones y la detección de versión',
+    // channel groups picker
+    'Channel groups': 'Grupos de canales',
+    'All groups': 'Todos los grupos',
+
+    // server status
+    'The TVHeadend user needs admin rights to see the server status (Configuration > Users > Access Entries).':
+        'El usuario de TVHeadend necesita permisos de administrador para ver el estado del servidor (Configuración > Usuarios > Entradas de acceso).',
+    'Loading...': 'Cargando...',
+    'Tuners in use': 'Sintonizadores en uso',
+    'No tuner in use': 'Ningún sintonizador en uso',
+    'Active streams': 'Emisiones activas',
+    'No active streams': 'No hay emisiones activas',
+    Tuner: 'Sintonizador',
+    Mux: 'Múltiplex',
+    Subscriptions: 'Suscr.',
+    Signal: 'Señal',
+    SNR: 'SNR',
+    Bitrate: 'Tasa',
+    Errors: 'Errores',
+    Channel: 'Canal',
+    Client: 'Cliente',
+    Profile: 'Perfil',
+    State: 'Estado',
+    Duration: 'Duración'
 };
 
 export default es;

@@ -191,7 +191,8 @@ const TV = () => {
     };
 
     /**
-     * switch to the next/previous channel of the current channel group (wraps around)
+     * switch to the next/previous channel of the current channel group (wraps around),
+     * channels that could not be played recently are skipped
      */
     const zapInGroup = (direction: 1 | -1) => {
         const view = epgData.getView();
@@ -214,6 +215,13 @@ const TV = () => {
                     nextRow = i;
                 }
             }
+        }
+        // skip failed channels, unless all of them failed
+        for (let skipped = 0; skipped < count - 1 && view.isFailed(nextRow); skipped++) {
+            nextRow = (nextRow + direction + count) % count;
+        }
+        if (view.isFailed(nextRow)) {
+            nextRow = row >= 0 ? (row + direction + count) % count : nextRow;
         }
         const nextPosition = view.getPosition(nextRow);
         nextPosition !== undefined && changeChannelPosition(nextPosition);
@@ -399,6 +407,8 @@ const TV = () => {
         if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
             console.log('giving up to reconnect: %s', reason);
             setPlaybackError(lastDiagnosis.current || t('The channel could not be played'));
+            // marked in the channel list and the epg, and skipped by P+/P-
+            epgData.markChannelFailed(currentChannel);
             return;
         }
 
@@ -425,6 +435,8 @@ const TV = () => {
                 clearReconnect();
                 clearStallTimeout();
                 setPlaybackError(diagnosis.message);
+                const currentChannel = getCurrentChannel();
+                currentChannel && epgData.markChannelFailed(currentChannel);
             }
         });
     };
@@ -445,6 +457,9 @@ const TV = () => {
         reconnectAttempts.current = 0;
         setPlaybackError('');
         setIsVideoPlaying(true);
+        // the channel works (again)
+        const currentChannel = getCurrentChannel();
+        currentChannel && epgData.clearChannelFailed(currentChannel);
     };
 
     const startSource = (videoElement: HTMLVideoElement, dataUrl: URL) => {

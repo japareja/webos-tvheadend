@@ -695,6 +695,10 @@ const TVGuide = (props: {
         const imageURL = channel?.getImageURL();
         const image = imageURL && imageCache.get(imageURL);
 
+        // channels that could not be played recently are dimmed
+        const alpha = canvas.globalAlpha;
+        canvas.globalAlpha = view.current.isFailed(position) ? 0.4 : alpha;
+
         // channel number in its own column left of the logo, long numbers get a smaller font
         if (channel) {
             const channelNumberText = channel.getChannelID().toString();
@@ -731,6 +735,7 @@ const TVGuide = (props: {
             //canvas.fillText(this.canvasUtils.getShortenedText(canvas, channel.getName(), drawingRect), drawingRect.left + (drawingRect.width /2), drawingRect.top + 9+  (drawingRect.bottom - drawingRect.top) / 2);
             canvas.textAlign = 'left';
         }
+        canvas.globalAlpha = alpha;
     };
 
     const getDrawingRectForChannelImage = (drawingRect: Rect, image: HTMLImageElement) => {

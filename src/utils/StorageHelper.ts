@@ -5,6 +5,7 @@ const STORAGE_KEY_LAST_CHANNEL = 'lastChannel';
 const STORAGE_KEY_CHANNEL_GROUP = 'channelGroup';
 const STORAGE_KEY_FAVORITES = 'favoriteChannels';
 const STORAGE_KEY_TEXT_TRACK_PREFIX = 'textTrack:';
+const STORAGE_KEY_FAILED_CHANNELS = 'failedChannels';
 
 type BackupWriter = (settings: { [key: string]: string }) => Promise<unknown>;
 
@@ -106,6 +107,21 @@ export default class StorageHelper {
     static setFavorites = (favorites: string[]) => {
         localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify(favorites));
         StorageHelper.scheduleBackup();
+    };
+
+    /** channels that could not be played recently: uuid -> time of the failure */
+    static getFailedChannels = (): { [uuid: string]: number } => {
+        try {
+            const failedChannels = JSON.parse(localStorage.getItem(STORAGE_KEY_FAILED_CHANNELS) || '{}');
+            return failedChannels && typeof failedChannels === 'object' ? failedChannels : {};
+        } catch {
+            return {};
+        }
+    };
+
+    static setFailedChannels = (failedChannels: { [uuid: string]: number }) => {
+        // only needed on this tv for a short time, so no backup
+        localStorage.setItem(STORAGE_KEY_FAILED_CHANNELS, JSON.stringify(failedChannels));
     };
 
     /** selected subtitle track per channel, 0 means subtitles off */
