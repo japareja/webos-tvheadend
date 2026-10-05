@@ -2,15 +2,9 @@ import { TVHDataServiceParms } from '../services/TVHDataService';
 
 const STORAGE_TVH_SETTING_KEY = 'TVH_SETTINGS';
 const STORAGE_KEY_LAST_CHANNEL = 'lastChannel';
-const STORAGE_PIP_SETTINGS_KEY = 'PIP_SETTINGS';
 const STORAGE_KEY_CHANNEL_GROUP = 'channelGroup';
 const STORAGE_KEY_FAVORITES = 'favoriteChannels';
 const STORAGE_KEY_TEXT_TRACK_PREFIX = 'textTrack:';
-
-export interface PipSettings {
-    // optional tvheadend streaming profile used for the picture in picture stream
-    profile: string;
-}
 
 type BackupWriter = (settings: { [key: string]: string }) => Promise<unknown>;
 
@@ -77,16 +71,6 @@ export default class StorageHelper {
 
     static setTvhSettings = (settings: TVHDataServiceParms) => {
         localStorage.setItem(STORAGE_TVH_SETTING_KEY, JSON.stringify(settings));
-        StorageHelper.scheduleBackup();
-    };
-
-    static getPipSettings = (): PipSettings => {
-        const settingsStr = localStorage.getItem(STORAGE_PIP_SETTINGS_KEY);
-        return settingsStr ? (JSON.parse(settingsStr) as PipSettings) : { profile: '' };
-    };
-
-    static setPipSettings = (settings: PipSettings) => {
-        localStorage.setItem(STORAGE_PIP_SETTINGS_KEY, JSON.stringify(settings));
         StorageHelper.scheduleBackup();
     };
 

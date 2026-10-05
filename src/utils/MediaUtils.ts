@@ -6,9 +6,6 @@ export default class MediaUtils {
     // UHD hint for the webOS media pipeline, so a 4k capable decoder is allocated
     static MAX_WIDTH = 3840;
     static MAX_HEIGHT = 2160;
-    // the picture in picture window only asks for a full hd decoder
-    static PIP_MAX_WIDTH = 1920;
-    static PIP_MAX_HEIGHT = 1080;
     // set when the typed source failed on this tv but the untyped one played
     static TYPED_SOURCE_DISABLED_KEY = 'typedSourceDisabled';
 
@@ -29,50 +26,6 @@ export default class MediaUtils {
             return undefined;
         }
         return Math.max(0, buffered.end(buffered.length - 1) - videoElement.currentTime);
-    }
-
-    /**
-     * Check whether the app can read the stream itself (needed to decode it without the video element).
-     * Reads the first bytes and stops, resolves false on any problem (e.g. cross origin restrictions).
-     */
-    static canReadStreamDirectly(url: URL, timeoutMillis = 5000): Promise<boolean> {
-        return new Promise<boolean>((resolve) => {
-            if (typeof fetch === 'undefined' || typeof AbortController === 'undefined') {
-                resolve(false);
-                return;
-            }
-            const controller = new AbortController();
-            const timeout = setTimeout(() => {
-                controller.abort();
-                resolve(false);
-            }, timeoutMillis);
-            fetch(url.toString(), { signal: controller.signal })
-                .then((response) => {
-                    if (!response.ok || !response.body) {
-                        throw new Error('status ' + response.status);
-                    }
-                    return response.body.getReader().read();
-                })
-                .then((chunk) => {
-                    clearTimeout(timeout);
-                    controller.abort();
-                    resolve(!!chunk.value && chunk.value.length > 0);
-                })
-                .catch((error) => {
-                    console.log('stream can not be read directly:', error && error.message);
-                    clearTimeout(timeout);
-                    resolve(false);
-                });
-        });
-    }
-
-    /**
-     * Returns a copy of the stream url that requests the given tvheadend streaming profile
-     */
-    static withProfile(url: URL, profile: string): URL {
-        const profileUrl = new URL(url.toString());
-        profileUrl.searchParams.set('profile', profile);
-        return profileUrl;
     }
 
     /**

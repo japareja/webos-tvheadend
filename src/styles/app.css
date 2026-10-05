@@ -239,66 +239,6 @@ body {
     padding: 10px;
 }
 
-/* picture in picture window, above the main video but below channel list, info bar and epg */
-.pip {
-    position: absolute;
-    top: 150px;
-    right: 40px;
-    width: 480px;
-    height: 270px;
-    z-index: 5;
-    border: 3px solid rgba(29, 170, 226, 1);
-    box-sizing: border-box;
-    overflow: hidden;
-}
-
-.pip.loading {
-    background: #222;
-}
-
-.pip.playing {
-    background: black;
-}
-
-.pip .pipVideo {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
-
-.pip .pipStatus {
-    position: absolute;
-    top: 50%;
-    width: 100%;
-    text-align: center;
-    transform: translateY(-50%);
-    color: #cccccc;
-}
-
-.pip .pipHint {
-    position: absolute;
-    top: 0;
-    right: 0;
-    padding: 4px 10px;
-    font-size: 20px;
-    color: #cccccc;
-    background-color: rgba(5, 16, 24, 0.8);
-}
-
-.pip .pipLabel {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 4px 10px;
-    font-size: 22px;
-    color: #cccccc;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    background-color: rgba(5, 16, 24, 0.8);
-}
-
 .tvMessage {
     position: absolute;
     top: 150px;

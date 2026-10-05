@@ -46,27 +46,6 @@ const es: { [text: string]: string } = {
     Favorite: 'Favorito',
     Group: 'Grupo',
 
-    // picture in picture
-    'Loading...': 'Cargando...',
-    Swap: 'Intercambiar',
-    Close: 'Cerrar',
-    'Picture in picture could not be started: {0}.': 'No se ha podido iniciar la imagen en imagen: {0}.',
-    'the second video did not start within {0} s': 'el segundo vídeo no ha arrancado en {0} s',
-    'the second video stopped the main video': 'el segundo vídeo ha detenido el vídeo principal',
-    'the TV rejected the second video': 'la TV ha rechazado el segundo vídeo',
-    'the TV rejected the second video ({0})': 'la TV ha rechazado el segundo vídeo ({0})',
-    'Checking why picture in picture could not be started...':
-        'Comprobando por qué no se ha podido iniciar la imagen en imagen...',
-    'TVHeadend accepts the picture in picture request, but the video did not play{0}. Either the TV does not play a second video at the same time, or TVHeadend could not prepare the stream with this profile (see its log).':
-        'TVHeadend acepta la petición de la imagen en imagen, pero el vídeo no se ha reproducido{0}. O la TV no reproduce un segundo vídeo a la vez, o TVHeadend no ha podido preparar el vídeo con ese perfil (revisa su log).',
-    'Direct access to the stream: {0}.': 'Acceso directo al vídeo: {0}.',
-    yes: 'sí',
-    no: 'no',
-    'TVHeadend refused the picture in picture stream: {0}':
-        'TVHeadend ha rechazado el vídeo de la imagen en imagen: {0}',
-    'Try a low resolution streaming profile for picture in picture in the setup.':
-        'Prueba con un perfil de streaming de baja resolución para la imagen en imagen en Ajustes.',
-
     // search
     'Program title': 'Título del programa',
     'No programs found': 'No se han encontrado programas',
@@ -82,8 +61,6 @@ const es: { [text: string]: string } = {
     'TVheadend URL': 'URL de TVHeadend',
     'User (Optional)': 'Usuario (opcional)',
     'Password (Optional)': 'Contraseña (opcional)',
-    'Picture in Picture': 'Imagen en imagen',
-    'Streaming profile (Optional)': 'Perfil de streaming (opcional)',
     Connect: 'Conectar',
     'Some checks failed, the settings can be saved anyway.':
         'Alguna comprobación ha fallado, pero puedes guardar los ajustes igualmente.',

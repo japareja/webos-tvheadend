@@ -62,7 +62,6 @@ ares-inspect -d tv com.willinux.tvh.app --open
 - Record live tv or plan recordings using EPG
 - Play and Manage recordings
 - User Authentication: basic and digest (md5, sha256)
-- Picture in picture (experimental, see below)
 - English and Spanish user interface (taken from the TV language)
 - The settings are also saved outside of the app, so they survive uninstalling and installing it again
   (where the TV allows it, the setup shows the location)
@@ -75,26 +74,14 @@ Live tv:
 * **Up / Down**: channel list
 * **OK**: channel info
 * **Red**: record, **Green**: menu (TV, search, recordings, setup), **Yellow**: audio/subtitles, **Blue**: EPG
-* **Right / Left**: picture in picture (see below)
+* **Right**: EPG (the Magic Remote has no physical color buttons)
+* **Left**: back to the previous channel, also while the channel info is shown
 
 Channel list:
 * **Yellow**: next channel group, **Blue**: add/remove favorite, **Right/Left**: program details
 
 EPG:
 * **Yellow**: next channel group
-
-## Picture in picture
-While watching live tv:
-* **Right arrow**: open the picture in picture window with the current channel (press again to close it)
-* Switch the main window to another channel as usual (P+/P-, numbers, channel list, EPG)
-* **Left arrow**: swap the channels of the main window and the picture in picture window
-
-The picture in picture window plays a second, muted tvheadend stream with its own video element, so it only
-works if the TV provides a second video decoder to apps. If the second video can't be started, or it interrupts
-the main video, the window is closed again, the main video is restarted and a message is shown.
-
-Optionally a tvheadend streaming profile can be set for the picture in picture stream in the setup
-(e.g. a transcoding profile with a lower resolution), which reduces the load on the decoder and the network.
 
 ## WebOS
 Useful links for video playback using webos

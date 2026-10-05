@@ -575,11 +575,10 @@ export default class TVHDataService {
      * Find out why a stream can't be played: request it like the video element does (without
      * credentials) and translate the answer of tvheadend. Fatal problems won't go away by retrying.
      */
-    async diagnoseStream(url: URL): Promise<{ message: string; isFatal: boolean; isAccessible?: boolean }> {
+    async diagnoseStream(url: URL): Promise<{ message: string; isFatal: boolean }> {
         try {
             await this.retrieveTest(url, false);
             return {
-                isAccessible: true,
                 message: t(
                     'TVHeadend gives access to the channel, but it could not be started (no free tuner, no signal, encrypted channel or format not supported by the TV).'
                 ),

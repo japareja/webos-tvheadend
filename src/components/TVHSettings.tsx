@@ -8,7 +8,7 @@ import TVHDataService, { TVHDataServiceParms } from '../services/TVHDataService'
 import TVHSettingsTest, { TestResults } from '../utils/TVHSettingsTest';
 import AppContext from '../AppContext';
 import TestResult from './TestResult';
-import StorageHelper, { PipSettings } from '../utils/StorageHelper';
+import StorageHelper from '../utils/StorageHelper';
 import { t } from '../i18n/I18n';
 import BodyText from '@enact/moonstone/BodyText';
 
@@ -24,7 +24,6 @@ const TVHSettings = (props: { unmount: () => void }) => {
         password: '',
         dvrUuid: 0
     });
-    const [pipSettings, setPipSettings] = useState<PipSettings>(StorageHelper.getPipSettings());
     const [backupInfo, setBackupInfo] = useState('');
     const tvhSettingsWrapper = useRef<HTMLDivElement>(null);
 
@@ -33,7 +32,6 @@ const TVHSettings = (props: { unmount: () => void }) => {
     const handleSave = () => {
         // put to storage
         StorageHelper.setTvhSettings(serviceParms);
-        StorageHelper.setPipSettings(pipSettings);
         // keep a copy outside of the app right away, so it survives uninstalling the app
         StorageHelper.writeBackupNow();
         setTvhDataService(new TVHDataService(serviceParms));
@@ -56,10 +54,6 @@ const TVHSettings = (props: { unmount: () => void }) => {
         setServiceParms({ ...serviceParms, tvhUrl: input.value });
         setIsValid(false);
         setConnectButtonEnabled(input.value.length > 0);
-    };
-
-    const handlePipProfileChange = (input: HTMLInputElement) => {
-        setPipSettings({ ...pipSettings, profile: input.value.trim() });
     };
 
     const getDataService = () => {
@@ -154,13 +148,6 @@ const TVHSettings = (props: { unmount: () => void }) => {
                     type="password"
                     onChange={handlePasswordChange}
                     placeholder={t('Password (Optional)')}
-                />
-                <Heading spacing="auto">{t('Picture in Picture')}</Heading>
-                <Input
-                    value={pipSettings.profile}
-                    type="text"
-                    onChange={handlePipProfileChange}
-                    placeholder={t('Streaming profile (Optional)')}
                 />
                 <br /> <br />
                 {!isLoading && (

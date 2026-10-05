@@ -10,12 +10,6 @@ describe('MediaUtils', () => {
         expect(MediaUtils.getMimeType(new URL('http://tvh/s?profile=custom'))).toBeUndefined();
     });
 
-    it('replaces the streaming profile', () => {
-        const url = MediaUtils.withProfile(new URL('http://tvh/s?auth=abc&profile=pass'), 'webtv-h264-aac-mpegts');
-        expect(url.searchParams.get('profile')).toBe('webtv-h264-aac-mpegts');
-        expect(url.searchParams.get('auth')).toBe('abc');
-    });
-
     it('labels the video quality', () => {
         expect(MediaUtils.getQualityLabel(3840, 2160)).toBe('UHD 3840x2160');
         expect(MediaUtils.getQualityLabel(1920, 1080)).toBe('HD 1920x1080');
