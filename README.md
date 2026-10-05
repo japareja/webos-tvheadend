@@ -82,6 +82,7 @@ Channel list:
 
 EPG:
 * **Yellow**: next channel group
+* **0-9**: move the guide to that channel number (without tuning it), **OK** then tunes the selected channel
 
 ## WebOS
 Useful links for video playback using webos

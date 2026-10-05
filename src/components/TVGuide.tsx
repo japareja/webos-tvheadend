@@ -9,6 +9,7 @@ import CanvasUtils from '../utils/CanvasUtils';
 import KodiMarkup from '../utils/KodiMarkup';
 import EPGEvent from '../models/EPGEvent';
 import AppContext from '../AppContext';
+import { GROUP_ALL } from '../models/EPGData';
 import '../styles/app.css';
 import { t } from '../i18n/I18n';
 
@@ -23,6 +24,10 @@ const VISIBLE_CHANNEL_COUNT = 8; // No of channel to show at a time
 const eventImageCache = new Map<string, HTMLImageElement>();
 // const VERTICAL_SCROLL_BOTTOM_PADDING_ITEM = VISIBLE_CHANNEL_COUNT / 2 - 1;
 const VERTICAL_SCROLL_TOP_PADDING_ITEM = VISIBLE_CHANNEL_COUNT / 2 - 1;
+
+// a typed channel number moves the guide to that channel after this delay, or right away with the max digits
+const NUMBER_INPUT_DELAY_MILLIS = 2000;
+const MAX_CHANNEL_NUMBER_DIGITS = 4;
 
 const TVGuide = (props: {
     toggleRecording: (event: EPGEvent, callback: () => unknown) => void;
@@ -39,6 +44,10 @@ const TVGuide = (props: {
     const view = useRef(epgData.getView());
     const focusedChannelPosition = useRef(Math.max(0, view.current.getRow(currentChannelPosition)));
     const [groupName, setGroupName] = useState(epgData.getCurrentGroup().name);
+    // channel number typed with the remote, the guide moves to that channel (without tuning it)
+    const numberInput = useRef('');
+    const numberInputTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [numberInputText, setNumberInputText] = useState('');
     const timePosition = useRef(EPGUtils.getNow());
 
     const millisPerPixel = useRef(0);
@@ -55,7 +64,10 @@ const TVGuide = (props: {
     const mChannelLayoutMargin = 3;
     const mChannelLayoutPadding = 10;
     const mChannelLayoutHeight = 75;
-    const mChannelLayoutWidth = 120;
+    // the channel column shows the channel number and the logo (or the name) right of it
+    const mChannelNumberWidth = 75;
+    const mChannelLayoutWidth = mChannelNumberWidth + 120;
+    const mChannelNumberTextSize = 28;
     const mChannelLayoutBackground = '#323232';
     const mChannelLayoutBackgroundFocus = 'rgb(50,85,110)';
 
@@ -683,6 +695,24 @@ const TVGuide = (props: {
         const imageURL = channel?.getImageURL();
         const image = imageURL && imageCache.get(imageURL);
 
+        // channel number in its own column left of the logo, long numbers get a smaller font
+        if (channel) {
+            const channelNumberText = channel.getChannelID().toString();
+            CanvasUtils.writeText(
+                canvas,
+                channelNumberText,
+                drawingRect.left + mChannelNumberWidth - mChannelLayoutPadding,
+                drawingRect.middle,
+                {
+                    fontSize: channelNumberText.length > 3 ? mChannelNumberTextSize - 6 : mChannelNumberTextSize,
+                    fillStyle: mEventLayoutTextColor,
+                    textAlign: 'right',
+                    isBold: true
+                }
+            );
+        }
+        drawingRect.left += mChannelNumberWidth;
+
         if (image) {
             drawingRect = getDrawingRectForChannelImage(drawingRect, image);
             canvas.drawImage(image, drawingRect.left, drawingRect.top, drawingRect.width, drawingRect.height);
@@ -744,6 +774,20 @@ const TVGuide = (props: {
 
         // do not pass this event to parents
         switch (keyCode) {
+            case 48: // 0
+            case 49: // 1
+            case 50: // 2
+            case 51: // 3
+            case 52: // 4
+            case 53: // 5
+            case 54: // 6
+            case 55: // 7
+            case 56: // 8
+            case 57: // 9
+                // don't switch the channel like in live tv, only move the guide to the typed channel
+                event.stopPropagation();
+                enterChannelNumberPart(keyCode - 48);
+                break;
             case 39: // right arrow
                 event.stopPropagation();
                 if (eventPosition < 0) {
@@ -785,6 +829,11 @@ const TVGuide = (props: {
                 break;
             case 13: // ok button -> switch to focused channel
                 event.stopPropagation();
+                if (numberInput.current) {
+                    // a channel number is being typed: move the guide there right away instead
+                    jumpToChannelNumber();
+                    break;
+                }
                 props.unmount();
                 selectChannel(channelPosition);
                 break;
@@ -831,6 +880,55 @@ const TVGuide = (props: {
     const selectChannel = (row: number) => {
         const position = view.current.getPosition(row);
         position !== undefined && setCurrentChannelPosition(position);
+    };
+
+    const clearNumberInputTimeout = () => {
+        numberInputTimeout.current && clearTimeout(numberInputTimeout.current);
+        numberInputTimeout.current = null;
+    };
+
+    /**
+     * collect the digits of a channel number, the guide moves there after a short delay
+     */
+    const enterChannelNumberPart = (digit: number) => {
+        const currentText = numberInput.current.length < MAX_CHANNEL_NUMBER_DIGITS ? numberInput.current : '';
+        numberInput.current = currentText + digit;
+        setNumberInputText(numberInput.current);
+
+        clearNumberInputTimeout();
+        if (numberInput.current.length >= MAX_CHANNEL_NUMBER_DIGITS) {
+            jumpToChannelNumber();
+        } else {
+            numberInputTimeout.current = setTimeout(jumpToChannelNumber, NUMBER_INPUT_DELAY_MILLIS);
+        }
+    };
+
+    /**
+     * focus the channel with the typed number in the guide, without tuning it
+     */
+    const jumpToChannelNumber = () => {
+        clearNumberInputTimeout();
+        const channelNumberText = numberInput.current;
+        numberInput.current = '';
+        if (!channelNumberText) return;
+
+        const position = epgData.getChannelPositionByNumber(parseInt(channelNumberText));
+        if (position < 0) {
+            setNumberInputText(t('Channel {0} not found', channelNumberText));
+            numberInputTimeout.current = setTimeout(() => setNumberInputText(''), NUMBER_INPUT_DELAY_MILLIS);
+            return;
+        }
+        setNumberInputText('');
+
+        let row = view.current.getRow(position);
+        if (row < 0) {
+            // the channel is not part of the current group, show all channels
+            epgData.setCurrentGroup(GROUP_ALL);
+            view.current = epgData.getView();
+            setGroupName(epgData.getCurrentGroup().name);
+            row = view.current.getRow(position);
+        }
+        row >= 0 && scrollToChannelPosition(row, false);
     };
 
     const changeGroup = () => {
@@ -962,6 +1060,7 @@ const TVGuide = (props: {
         return () => {
             // clear timeout in case component is unmounted
             cancelScrollAnimation();
+            clearNumberInputTimeout();
         };
     }, []);
 
@@ -998,6 +1097,7 @@ const TVGuide = (props: {
                 <span className="colorKey yellow"></span>
                 {t('Group')}: {groupName}
             </div>
+            {numberInputText !== '' && <div className="epgNumberInput">{numberInputText}</div>}
         </div>
     );
 };

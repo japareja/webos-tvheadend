@@ -271,6 +271,19 @@ body {
     color: #cccccc;
 }
 
+/* channel number typed in the epg, the guide moves to that channel */
+.epgNumberInput {
+    position: absolute;
+    top: 90px;
+    right: 40px;
+    padding: 5px 25px;
+    font-size: 64px;
+    font-weight: bold;
+    color: #ffffff;
+    background-color: rgba(5, 16, 24, 0.85);
+    border: 2px solid rgba(29, 170, 226, 1);
+}
+
 .colorKey {
     display: inline-block;
     width: 20px;
